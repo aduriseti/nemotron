@@ -13,3 +13,5 @@ Formatting
 - Fix: uv run --frozen ruff check *.py --fix
 - Sort imports: uv run --frozen ruff check --select I *.py --fix
 - Type checking: uv run --frozen mypy *.py
+
+To start the server, do `./serve.sh`
