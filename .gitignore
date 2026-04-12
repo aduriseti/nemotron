@@ -28,3 +28,4 @@ training/sft/04-09-21-16/
 training/sft/04-10-02-42/
 training/sft/04-10-03-06/
 *.zip
+.env
