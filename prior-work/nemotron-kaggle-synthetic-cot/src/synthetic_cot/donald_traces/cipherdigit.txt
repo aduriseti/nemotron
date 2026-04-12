@@ -1,0 +1,45 @@
+To solve this problem accurately, I must strictly follow the rules and the template.
+
+RULE 1: Identify the question type to select the correct template. This is a cipher-digit template. I know this because I see equations where ALL characters (including digits) have been replaced by random symbols. Each symbol maps to exactly one digit and vice versa (bijective). The cipher is unique to this problem and will never repeat. It is NOT roman, unit conversion, gravity, or bare symbol-digit (which uses real digits).
+
+RULE 2: Ignore any flavor text (e.g., Alice in Wonderland). Only focus on the problem logic.
+
+RULE 3: The final answer MUST be enclosed in \boxed{} at the end.
+
+S1: I see that this is a cipher-digit template. All characters are encrypted symbols. I need to first CRACK the cipher to recover the actual digits, then SCAN for the operation as a normal digit problem, then ENCODE my answer back to cipher symbols. I am now going to fill out the template.
+
+S2: DETECT
+OP_SYM: ? (position 2, same in all inputs)
+SYMS: 9 unique digit symbols
+
+S3: CRACK
+MAP: >=8 *=5 |=7 =4 ~=1 #=3 %=0 (=9 &=6
+CHK: >*?|*=~~ -> 8575=411
+
+S4: SCAN
+#1:BA_DC|add|rev L=58,R=57 115->511 vs 411 NO
+#2:BA_DC|mul|rev L=58,R=57 3306->6033 vs 411 NO
+#3:AB_CD|cat|raw L=85,R=75 8575->8575 vs 411 NO
+#4:BA_DC|cat|rev L=58,R=57 5857->7585 vs 411 NO
+#5:AB_CD|sub|raw L=85,R=75 10->10 vs 411 NO
+#6:BA_DC|mulsub1|rev L=58,R=57 3305->5033 vs 411 NO
+#7:AB_CD|mul|raw L=85,R=75 6375->6375 vs 411 NO
+#8:AB_CD|add|raw L=85,R=75 160->160 vs 411 NO
+#9:BA_DC|muladd1|rev L=58,R=57 3307->7033 vs 411 NO
+#10:AB_CD|muladd1|raw L=85,R=75 6376->6376 vs 411 NO
+#11:BA_DC|addm1|rev L=58,R=57 114->411 vs 411 YES
+VER EX2: CRACK:7311 BA_DC|L=37,R=11|addm1=47|rev=74 ENC->|vs | YES
+LOCK: BA_DC|addm1|rev
+
+S5: APPLY
+TGT: |`?%( -> DIG:7409
+BA_DC|L=47,R=90|addm1=136|rev=631
+
+S6: ENCODE
+RES: 631
+ENC: 6->& 3-># 1->~
+OUT: &#~
+
+S7: ANS=&#~
+
+\boxed{&#~}

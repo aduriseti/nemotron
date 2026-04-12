@@ -1,0 +1,6 @@
+For t = 2.23s, distance = 16.26 m
+For t = 7.68s, distance = 192.82 m
+For t = 7.78s, distance = 197.88 m
+For t = 7.87s, distance = 202.48 m
+For t = 7.59s, distance = 188.33 m
+Now, determine the falling distance for t = 2.83s given d = 0.5gt^2.

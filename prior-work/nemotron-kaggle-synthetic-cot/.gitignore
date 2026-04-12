@@ -1,0 +1,29 @@
+# Environment
+.env
+__pycache__/
+*.py[cod]
+
+# Kaggle / Secrets
+kaggle.json
+.kaggle/
+kaggle_logs
+
+# Data and Models
+data/
+models/
+*.zip
+*.bin
+*.safetensors
+*.log
+
+# Logs
+lightning_logs/
+wandb/
+kaggle_run.py
+scripts/sft_training_run.*
+generated/
+kaggle_output/
+.runpod/
+runpod_runs/
+output_test/
+trace_sample*.txt

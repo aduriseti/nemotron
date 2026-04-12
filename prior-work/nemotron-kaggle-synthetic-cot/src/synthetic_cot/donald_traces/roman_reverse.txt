@@ -1,0 +1,26 @@
+To solve this problem accurately, I must strictly follow the rules and the template.
+
+RULE 1: Identify the question type to select the correct template. This is a Roman numeral template. I know this because I see Roman numeral letters converting to numbers, or numbers converting to Roman numerals. It is NOT binary, symbol, digit, or any other conversion type.
+
+RULE 2: Ignore any flavor text (e.g., Alice in Wonderland). Only focus on the problem logic.
+
+RULE 3: The final answer MUST be enclosed in \boxed{} at the end.
+
+S1: I see that this is a Roman numeral template. I am converting a Roman numeral to an integer. I am now going to fill out the template.
+
+S2: PARSE MMMXCII
+G1: M=1000, RT=1000
+G2: M=1000, RT=2000
+G3: M=1000, RT=3000
+G4: XC=90, RT=3090
+G5: I=1, RT=3091
+G6: I=1, RT=3092
+
+S3: VER - Rebuild from my answer to verify.
+3092: TH:3->MMM, TE:9->XC, ON:2->II
+REBUILD: MMM+XC+II = MMMXCII
+CHK: Does REBUILD(MMMXCII) = INPUT(MMMXCII)? YES
+
+S4: ANS=3092
+
+\boxed{3092}

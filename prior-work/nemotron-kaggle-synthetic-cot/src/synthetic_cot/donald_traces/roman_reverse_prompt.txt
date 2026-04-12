@@ -1,0 +1,4 @@
+CLXXVII -> 177
+CDLXXXIV -> 484
+MMCCXV -> 2215
+Convert MMMXCII to an integer.

@@ -1,0 +1,75 @@
+To solve this problem accurately, I must strictly follow the rules and the template.
+
+RULE 1: Identify the question type to select the correct template. This is a letter substitution cipher template. I see encrypted phrases mapped to plaintext phrases. Each letter maps to exactly one other letter (a-z, bijective). It is NOT roman, unit conversion, gravity, symbol-digit, cipher-digit, or binary.
+
+RULE 2: Ignore any flavor text (e.g., Alice in Wonderland). Only focus on the problem logic.
+
+RULE 3: The final answer MUST be enclosed in \boxed{} at the end.
+
+S1: This is a letter substitution cipher. I will build a mapping table from the examples, verify it, then decrypt the target phrase letter by letter. Any gaps will be filled using vocabulary matching. I am now going to fill out the template.
+
+S2: LEN
+TGT:"sdtdphwt pkiifj hdttdoz ufppdp"
+W1:8 W2:6 W3:7 W4:6
+
+S3: TABLE
+EX1:"lafyvj svkzqz spxzjkt"->"knight chases crystal" [13] l=k,a=n,f=i,y=g,v=h,j=t,s=c,k=a,z=s,q=e,p=r,x=y,t=l
+EX2:"ipfyvj vkjjqp fukyfaqz ykpmqa"->"bright hatter imagines garden" [3] i=b,u=m,m=d
+EX3:"ydtmqa lfay hdttdoz fztkam"->"golden king follows island" [3] d=o,h=f,o=w
+EX4:"wamqp mpkyda qegtdpqz kasfqaj sknq"->"under dragon explores ancient cave" [4] w=u,e=x,g=p,n=v
+EX5:"jvpdwyv lafyvj pqkmz stqnqp uqzzkyq"->"through knight reads clever message" [0] none
+EX6:"kpdwam udwzq fukyfaqz ofzq skzjtq"->"around mouse imagines wise castle" [0] none
+EX7:"udwzq mfzsdnqpz ydtmqa spxzjkt"->"mouse discovers golden crystal" [0] none
+TOTAL:23/26
+
+S4: VER
+HELD:"ukyfskt jqksvqp opfjqz dsqka" -> "magical teacher writes ocean" CHK:Y
+CROSS:7/7 examples verified
+
+S5: DECRYPT
+W1: sdtdphwt
+ s->c
+ d->o
+ t->l
+ d->o (W1)
+ p->r
+ h->f
+ w->u
+ t->l (W1)
+ = colorful
+W2: pkiifj
+ p->r (W1)
+ k->a
+ i->b
+ i->b (W2)
+ f->i
+ j->t
+ = rabbit
+W3: hdttdoz
+ h->f (W1)
+ d->o (W1)
+ t->l (W1)
+ t->l (W1)
+ d->o (W1)
+ o->w
+ z->s
+ = follows
+W4: ufppdp
+ u->m
+ f->i (W2)
+ p->r (W1)
+ p->r (W1)
+ d->o (W1)
+ p->r (W1)
+ = mirror
+
+S6: CHECK
+W1:"colorful" len=8Y alpha=Y vocab=Y gaps=N PASS
+W2:"rabbit" len=6Y alpha=Y vocab=Y gaps=N PASS
+W3:"follows" len=7Y alpha=Y vocab=Y gaps=N PASS
+W4:"mirror" len=6Y alpha=Y vocab=Y gaps=N PASS
+ALL:PASS 4/4 words
+
+S7: ANS=colorful rabbit follows mirror
+
+\boxed{colorful rabbit follows mirror}

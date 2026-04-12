@@ -1,0 +1,28 @@
+To solve this problem accurately, I must strictly follow the rules and the template.
+
+RULE 1: Identify the question type to select the correct template. This is a gravity kinematics template. I know this because I see time and distance values that follow d = 0.5gt^2, and the problem asks me to find distance for a new time value. It is NOT roman, binary, symbol, digit, unit conversion, or any other conversion type.
+
+RULE 2: Ignore any flavor text (e.g., Alice in Wonderland). Only focus on the problem logic.
+
+RULE 3: The final answer MUST be enclosed in \boxed{} at the end. The answer MUST be exactly 2 decimal places (X.XX format).
+
+S1: I see that this is a gravity kinematics template. I will find the rate constant (0.5g) from the examples and apply it to the target time. I am now going to fill out the template.
+
+S2: SOLVE
+I will use EX1 to find the rate constant (0.5g).
+EX1: t=2.23, d=16.26
+T_SQ: t^2 = 2.23^2 = 4.9729
+RATE: d / t^2 = 16.26 / 4.9729 = 3.2697
+TGT_SQ: target_t^2 = 2.83^2 = 8.0089
+RESULT: RATE * TGT_SQ = 3.2697 * 8.0089 = 26.1869
+RND: 26.1869 -> 26.19
+
+S3: VER - Check rate consistency using EX2.
+EX2: t=7.68, d=192.82
+T_SQ2: t^2 = 7.68^2 = 58.9824
+RATE2: d / t^2 = 192.82 / 58.9824 = 3.2691
+CHK: Does |RATE(3.2697) - RATE2(3.2691)| < 0.05? YES
+
+S4: ANS=26.19
+
+\boxed{26.19}

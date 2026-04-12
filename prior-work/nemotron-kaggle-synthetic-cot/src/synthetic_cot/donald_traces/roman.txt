@@ -1,0 +1,29 @@
+To solve this problem accurately, I must strictly follow the rules and the template.
+
+RULE 1: Identify the question type to select the correct template. This is a Roman numeral template. I know this because I see Roman numeral letters converting to numbers, or numbers converting to Roman numerals. It is NOT binary, symbol, digit, or any other conversion type.
+
+RULE 2: Ignore any flavor text (e.g., Alice in Wonderland). Only focus on the problem logic.
+
+RULE 3: The final answer MUST be enclosed in \boxed{} at the end.
+
+S1: I see that this is a Roman numeral template. I am converting an integer to Roman numerals. I am now going to fill out the template.
+
+S2: DECOMPOSE 1893
+TH:1->M (1000)
+HU:8->DCCC (800)
+TE:9->XC (90)
+ON:3->III (3)
+
+S3: CAT
+M + DCCC = MDCCC
+MDCCC + XC = MDCCCXC
+MDCCCXC + III = MDCCCXCIII
+RESULT: MDCCCXCIII
+
+S4: VER - Re-parse my RESULT to verify.
+MDCCCXCIII: M=1000, D=500, C=100, C=100, C=100, XC=90, I=1, I=1, I=1
+1000, +500=1500, +100=1600, +100=1700, +100=1800, +90=1890, +1=1891, +1=1892, +1=1893
+CHK: Does REPARSE(1893) = TARGET(1893)? YES
+
+S5: ANS=MDCCCXCIII
+\boxed{MDCCCXCIII}

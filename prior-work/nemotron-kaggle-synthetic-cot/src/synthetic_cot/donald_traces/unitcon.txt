@@ -1,0 +1,25 @@
+To solve this problem accurately, I must strictly follow the rules and the template.
+
+RULE 1: Identify the question type to select the correct template. This is a unit conversion template. I know this because I see measurements being converted from one unit to another using example pairs. It is NOT roman, binary, symbol, digit, or any other conversion type.
+
+RULE 2: Ignore any flavor text (e.g., Alice in Wonderland). Only focus on the problem logic.
+
+RULE 3: The final answer MUST be enclosed in \boxed{} at the end. The answer MUST be exactly 2 decimal places (X.XX format).
+
+S1: I see that this is a unit conversion template. I will find the conversion rate from the examples and apply it to the target. I am now going to fill out the template.
+
+S2: SOLVE
+I will use EX1 to find the conversion rate.
+EX1: in=47.2, out=220.69
+RATE: out1 / in1 = 220.69 / 47.2 = 4.6756
+RESULT: target * RATE = 93.75 * 4.6756 = 438.3408
+RND: 438.3408 -> 438.34
+
+S3: VER - Check rate consistency using EX2.
+EX2: in=59.07, out=276.19
+RATE2: out2 / in2 = 276.19 / 59.07 = 4.6756
+CHK: Does |RATE(4.6756) - RATE2(4.6756)| < 0.01? YES
+
+S4: ANS=438.34
+
+\boxed{438.34}
