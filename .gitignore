@@ -9,8 +9,6 @@ env.json
 !augmented.csv
 raw/
 corpus/
-training/sft/**/tokens/*
-training/sft/**/logprobs/*
 training/sft/03-23-02-44/
 training/sft/03-25-07-33/
 training/sft/03-27-01-55/
@@ -25,11 +23,9 @@ training/sft/04-06-23-18/
 training/sft/04-07-02-00/
 training/sft/04-08-02-34/
 training/sft/04-08-11-49/
-training/sft/04-08-16-14/
 training/sft/04-09-03-00/
 training/sft/04-09-12-26/
 training/sft/04-09-20-08/
 training/sft/04-09-21-16/
 training/sft/04-10-02-42/
 training/sft/04-10-03-06/
-training/sft/04-10-04-15/
