@@ -12,3 +12,4 @@ corpus/
 training/
 *.zip
 .env
+reasoning/
