@@ -262,12 +262,12 @@ def filter_training_examples(examples: list[TrainingExample]) -> list[TrainingEx
     #     for e in examples
     #     if e.category in ("numeral", "cryptarithm_deduce", "cryptarithm_guess")
     # ]
-    # return [
-    #     e
-    #     for e in examples
-    #     if e.category in ("bit_manipulation") and e.problem_id.startswith("c")
-    # ]
-    return examples
+    return [
+        e
+        for e in examples
+        if e.category in ("spelling")
+    ]
+    # return examples
 
 
 async def main():
