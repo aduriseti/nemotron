@@ -32,7 +32,9 @@ from loss_config import (
     LossConfig,
 )
 from lr_schedule import LRSchedule, StepLinearDecayLRSchedule
-from train_common import TrainingExample, load_corpus_entries
+from train_common import TrainingExample, load_corpus_entries, DatasetMode
+
+ACTIVE_MODE = DatasetMode.KAGGLE_ONLY
 
 logger = logging.getLogger(__name__)
 
@@ -257,17 +259,9 @@ def compute_epoch_metrics(
 
 
 def filter_training_examples(examples: list[TrainingExample]) -> list[TrainingExample]:
-    # return [
-    #     e
-    #     for e in examples
-    #     if e.category in ("numeral", "cryptarithm_deduce", "cryptarithm_guess")
-    # ]
-    return [
-        e
-        for e in examples
-        if e.category in ("spelling")
-    ]
-    # return examples
+    if ACTIVE_MODE == DatasetMode.SPELLING_TEST:
+        return [e for e in examples if e.category == "spelling"]
+    return examples
 
 
 async def main():

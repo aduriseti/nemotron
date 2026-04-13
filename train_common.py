@@ -12,6 +12,13 @@ import tinker
 
 logger = logging.getLogger(__name__)
 
+from enum import Enum
+
+class DatasetMode(Enum):
+    KAGGLE_ONLY = "kaggle_only"         # Only original 9,500 problems
+    FULL_PIPELINE = "full_pipeline"     # Kaggle + Augmentations + Duplicates
+    SPELLING_TEST = "spelling_test"     # Only synthetic spelling data
+
 Category = Literal[
     "bit_manipulation",
     "cipher",
@@ -22,6 +29,11 @@ Category = Literal[
     "gravity",
     "numeral",
     "unit_conversion",
+    "spelling",
+    "concatenation",
+    "splitting",
+    "matching",
+    "lstrip"
 ]
 
 CORPUS_DIR = Path(__file__).parent / "corpus"
