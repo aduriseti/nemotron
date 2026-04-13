@@ -13,3 +13,4 @@ training/
 *.zip
 .env
 reasoning/
+corpus/
