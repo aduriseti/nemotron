@@ -120,8 +120,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if not PROBLEMS_INDEX.exists():
-        print(f"No {PROBLEMS_INDEX} found.")
-        return
+        raise FileNotFoundError(f"No {PROBLEMS_INDEX} found.")
 
     # Read existing entries to preserve fields, then merge results back
     existing: dict[str, dict] = {}

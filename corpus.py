@@ -170,8 +170,7 @@ def build_segments(
 
 def main() -> None:
     if not PROBLEMS_INDEX.exists():
-        print(f"No {PROBLEMS_INDEX} found. Run problems.py first.")
-        return
+        raise FileNotFoundError(f"No {PROBLEMS_INDEX} found. Run problems.py first.")
 
     # Load tokenizers
     tokenizer = Tokenizer.from_file(str(TOKENIZER_PATH))
