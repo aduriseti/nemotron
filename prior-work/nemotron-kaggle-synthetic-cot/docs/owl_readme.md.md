@@ -18,6 +18,8 @@ I also implemented a solver for the bit manipulation puzzles: [bit_solver.py](..
 
 However I think that this writeup is the best post describing how to write an algorithm for an LLM to replicate after training - it explains the competition leaders's approach to the bit manipulation problems and how he fits his algorithm w/in 7000 tokens: https://www.kaggle.com/competitions/nvidia-nemotron-model-reasoning-challenge/discussion/690307 ([bit_manipulation_strategy_85_accuracy.md](../kaggle_notebooks/bit_manipulation_strategy_85_accuracy.md))
 
+This repo is forked from from the current competition leader - you can see his solvers and COT generators in the [reasoners](../../../reasoners) directory
+
 # Less important reading:
 Here is the overall writeup by competition leader on his solution beyond generating COT traces: https://www.kaggle.com/competitions/nvidia-nemotron-model-reasoning-challenge/discussion/689915 ([open_progress_prize_sft_maximize_min_logprob.md](../kaggle_notebooks/open_progress_prize_sft_maximize_min_logprob.md))
 
