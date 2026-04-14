@@ -35,8 +35,6 @@ adapter_vol = modal.Volume.from_name("adapter-weights", create_if_missing=True)
 app = modal.App("upload-adapter-to-kaggle")
 
 ADAPTER_DIR = "/adapter/weights"
-DEFAULT_INSTANCE = "huikang/nemotron-adapter/Transformers/default"
-
 
 def _print_files(directory: str) -> list[str]:
     """Print files in a directory with sizes."""
@@ -118,7 +116,7 @@ def download_adapter(tinker_model: str, tinker_env: dict[str, str]):
     volumes={"/adapter": adapter_vol},
     timeout=3 * 60 * 60,
 )
-def upload_to_kaggle(kaggle_api_token: str):
+def upload_to_kaggle(kaggle_api_token: str, default_instance: str):
     """Upload adapter from Modal volume to Kaggle."""
     kaggle_dir = os.path.expanduser("~/.kaggle")
     os.makedirs(kaggle_dir, exist_ok=True)
@@ -137,7 +135,7 @@ def upload_to_kaggle(kaggle_api_token: str):
     files = _print_files(ADAPTER_DIR)
     print(f"Found {len(files)} files")
 
-    parts = DEFAULT_INSTANCE.split("/")
+    parts = default_instance.split("/")
     owner, model_slug, framework, instance_slug = (
         parts[0],
         parts[1],
@@ -145,15 +143,39 @@ def upload_to_kaggle(kaggle_api_token: str):
         parts[3],
     )
 
+    def base_model_exists() -> bool:
+        try:
+            api.model_get(f"{owner}/{model_slug}")
+            return True
+        except HTTPError:
+            return False
+
+    if not base_model_exists():
+        print(f"\nBase model {owner}/{model_slug} does not exist, creating...")
+        model_meta = {
+            "ownerSlug": owner,
+            "slug": model_slug,
+            "title": model_slug,
+            "isPrivate": True,
+            "description": "Nemotron-3-Nano-30B LoRA adapter"
+        }
+        meta_dir = tempfile.mkdtemp()
+        with open(os.path.join(meta_dir, "model-metadata.json"), "w") as f:
+            json.dump(model_meta, f)
+        res = api.model_create_new(meta_dir)
+        if getattr(res, "error", None) or getattr(res, "_error", None):
+            raise ValueError(f"Failed to create base model: {res}")
+        print("Base model created!")
+
     def instance_exists() -> bool:
         try:
-            api.model_instance_get(DEFAULT_INSTANCE)
+            api.model_instance_get(default_instance)
             return True
         except HTTPError:
             return False
 
     if not instance_exists():
-        print(f"\nInstance {DEFAULT_INSTANCE} does not exist, creating...")
+        print(f"\nInstance {default_instance} does not exist, creating...")
 
         upload_dir = tempfile.mkdtemp()
         for fname in files:
@@ -172,13 +194,17 @@ def upload_to_kaggle(kaggle_api_token: str):
             json.dump(metadata, f)
         print(f"Created metadata: {metadata}")
 
-        api.model_instance_create(upload_dir, dir_mode="skip")
+        res = api.model_instance_create(upload_dir, dir_mode="skip")
+        if getattr(res, "error", None) or getattr(res, "_error", None):
+            raise ValueError(f"Failed to create instance: {res}")
         print("Instance created")
     else:
-        print(f"\nInstance {DEFAULT_INSTANCE} already exists")
+        print(f"\nInstance {default_instance} already exists")
 
-    print(f"\nUploading new version to {DEFAULT_INSTANCE}...")
-    api.model_instance_version_create(DEFAULT_INSTANCE, ADAPTER_DIR, dir_mode="skip")
+    print(f"\nUploading new version to {default_instance}...")
+    res = api.model_instance_version_create(default_instance, ADAPTER_DIR, dir_mode="skip")
+    if getattr(res, "error", None) or getattr(res, "_error", None):
+        raise ValueError(f"Failed to create version: {res}")
     print("Version created")
 
     print("\nUpload complete!")
@@ -209,14 +235,25 @@ def main():
     with open("env.json") as f:
         env = json.load(f)
 
+    with open("kaggle_config.json") as f:
+        config = json.load(f)
+    
+    default_instance = f"{config['model_owner']}/{config['model_slug']}/{config['framework']}/{config['instance_slug']}"
+
     tinker_model = _find_latest_adapter()
     print(f"Tinker model: {tinker_model}")
-    print(f"Kaggle instance: {DEFAULT_INSTANCE}")
+    print(f"Kaggle instance: {default_instance}")
 
     kaggle_api_token = env["KAGGLE_API_TOKEN"]
     tinker_env = {"TINKER_API_KEY": env["TINKER_API_KEY"]}
 
     download_adapter.remote(tinker_model, tinker_env)
 
-    result = upload_to_kaggle.remote(kaggle_api_token)
+    result = upload_to_kaggle.remote(kaggle_api_token, default_instance)
     print(result)
+
+    # Increment version in config
+    config["latest_version"] += 1
+    with open("kaggle_config.json", "w") as f:
+        json.dump(config, f, indent=4)
+    print(f"Incremented latest_version to {config['latest_version']} in kaggle_config.json")

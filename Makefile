@@ -1,7 +1,7 @@
 .PHONY: all reasoning corpus train upload setup help
 
 # Default target: run the full pipeline
-all: reasoning corpus train upload
+all: reasoning corpus train upload notebook
 
 # 1. Generate reasoning traces
 reasoning:
@@ -19,6 +19,10 @@ train:
 # Note: Requires Modal setup and Kaggle/Tinker keys in env.json
 upload:
 	uv run modal run upload_adapter.py
+
+# 5. Push and run the evaluation notebook on Kaggle
+notebook:
+	uv run python3 push_notebook.py
 
 # Helper: Set up Modal authentication
 setup:

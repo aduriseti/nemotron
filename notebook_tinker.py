@@ -1,9 +1,25 @@
 # %% [code] {"execution":{"iopub.status.busy":"2026-03-22T22:56:04.826298Z","iopub.execute_input":"2026-03-22T22:56:04.826468Z","iopub.status.idle":"2026-03-22T22:56:04.828414Z","shell.execute_reply.started":"2026-03-22T22:56:04.826457Z","shell.execute_reply":"2026-03-22T22:56:04.828191Z"},"jupyter":{"outputs_hidden":false}}
-ADAPTER_PATH = "/kaggle/input/models/huikang/nemotron-adapter/transformers/default/20"
 TEST_GENERATION = True
 
 # %% [code] {"execution":{"iopub.status.busy":"2026-03-22T22:56:04.832199Z","iopub.execute_input":"2026-03-22T22:56:04.832397Z","iopub.status.idle":"2026-03-22T22:56:06.070916Z","shell.execute_reply.started":"2026-03-22T22:56:04.832389Z","shell.execute_reply":"2026-03-22T22:56:06.070624Z"},"jupyter":{"outputs_hidden":false}}
 import shutil
+import glob
+import os
+import sys
+
+print("--- DIRECTORY TREE OF /kaggle/input ---", file=sys.stderr)
+for root, dirs, files in os.walk("/kaggle/input"):
+    for name in files:
+        print(os.path.join(root, name), file=sys.stderr)
+print("---------------------------------------", file=sys.stderr)
+
+adapter_paths = glob.glob("/kaggle/input/**/adapter_config.json", recursive=True)
+if not adapter_paths:
+    raise FileNotFoundError("Could not find adapter_config.json anywhere in /kaggle/input/")
+
+# The directory containing adapter_config.json is the ADAPTER_PATH
+ADAPTER_PATH = os.path.dirname(adapter_paths[0])
+print(f"Found ADAPTER_PATH dynamically at: {ADAPTER_PATH}")
 
 shutil.copytree(
     ADAPTER_PATH,
@@ -158,26 +174,29 @@ len(trained_adapter_keys), len(reference_adapter_keys)
 
 # %% [code] {"execution":{"iopub.status.busy":"2026-03-22T22:56:17.240467Z","iopub.execute_input":"2026-03-22T22:56:17.240537Z","iopub.status.idle":"2026-03-22T22:56:19.996770Z","shell.execute_reply.started":"2026-03-22T22:56:17.240530Z","shell.execute_reply":"2026-03-22T22:56:19.996411Z"},"jupyter":{"outputs_hidden":false}}
 import re
+import sys
+from tqdm import tqdm
 
 import torch
 from safetensors import safe_open
 from safetensors.torch import save_file
 
+print("Starting adapter conversion...", file=sys.stderr)
 # --- Load all trained adapter tensors ---
 adapter_tensors = {}
 with safe_open("adapter_model.safetensors", framework="pt", device="cpu") as f:
-    for key in f.keys():
+    for key in tqdm(f.keys(), desc="Loading adapter tensors"):
         adapter_tensors[key] = f.get_tensor(key)
 
 # --- Collect adapter base names (without .lora_A/.lora_B.weight suffix) ---
 base_names = set()
-for key in adapter_tensors:
+for key in tqdm(adapter_tensors, desc="Collecting base names"):
     base = re.sub(r"\.lora_[AB]\.weight$", "", key)
     base_names.add(base)
 
 # --- Identify Mamba layers needing gate_proj+x_proj → in_proj ---
 mamba_merge_layers = {}  # layer_path -> {"gate_proj": base, "x_proj": base}
-for base in base_names:
+for base in tqdm(base_names, desc="Identifying Mamba layers"):
     for proj in ("gate_proj", "x_proj"):
         if f".{proj}" in base:
             layer_path = base.rsplit(f".{proj}", 1)[0]
@@ -192,7 +211,7 @@ model_key_shapes = {k: s for k, s, _ in model_keys}
 # --- Build output tensors ---
 tensors = {}
 
-for base in sorted(base_names):
+for base in tqdm(sorted(base_names), desc="Building output tensors"):
     lora_A = adapter_tensors[f"{base}.lora_A.weight"]
     lora_B = adapter_tensors[f"{base}.lora_B.weight"]
     renamed = trained_adapter_key_rename(base)
@@ -236,7 +255,7 @@ for base in sorted(base_names):
     tensors[f"{renamed}.lora_B.weight"] = lora_B
 
 # --- Mamba: gate_proj + x_proj → in_proj via SVD ---
-for layer_path, projs in sorted(mamba_merge_layers.items()):
+for layer_path, projs in tqdm(sorted(mamba_merge_layers.items()), desc="Merging Mamba layers (SVD)"):
     renamed_layer = trained_adapter_key_rename(layer_path)
     in_proj_base = f"{renamed_layer}.in_proj"
 
@@ -280,6 +299,7 @@ print(
     f"\nConverted {len(adapter_tensors)} trained tensors → {len(tensors)} output tensors"
 )
 save_file(tensors, "adapter_model.safetensors")
+print("Adapter conversion complete.", file=sys.stderr)
 
 # %% [code] {"execution":{"iopub.status.busy":"2026-03-22T22:56:58.488923Z","iopub.execute_input":"2026-03-22T22:56:58.489252Z","iopub.status.idle":"2026-03-22T22:56:58.507967Z","shell.execute_reply.started":"2026-03-22T22:56:58.489240Z","shell.execute_reply":"2026-03-22T22:56:58.507712Z"},"jupyter":{"outputs_hidden":false}}
 from safetensors import safe_open
@@ -565,8 +585,9 @@ def generate_predictions(
     Args:
         debug: If True, writes a CSV file with raw model outputs and extracted predictions.
     """
-    # Cache Model
+    print("Starting model caching...", file=sys.stderr)
     cache_model(MODEL_PATH, num_workers=16, chunk_mb=1024)
+    print("Model caching complete.", file=sys.stderr)
 
     os.environ["TRANSFORMERS_NO_TF"] = "1"
     os.environ["TRANSFORMERS_NO_FLAX"] = "1"
@@ -577,6 +598,7 @@ def generate_predictions(
     from vllm import LLM, SamplingParams
     from vllm.lora.request import LoRARequest
 
+    print("Initializing vLLM engine...", file=sys.stderr)
     # Initialize vLLM Offline inference Engine
     llm = LLM(
         model=str(MODEL_PATH),
@@ -590,7 +612,9 @@ def generate_predictions(
         max_lora_rank=max_lora_rank,
         enable_prefix_caching=True,
         enable_chunked_prefill=True,
+        disable_log_stats=False,
     )
+    print("vLLM engine initialized.", file=sys.stderr)
 
     sampling_params = SamplingParams(
         temperature=temperature,
@@ -598,9 +622,12 @@ def generate_predictions(
         max_tokens=max_tokens,
     )
 
+    print("Initialized vLLM engine! Loading tokenizers...")
     tokenizer = llm.get_tokenizer()
     prompts = []
-    for item in test_df.itertuples(index=False):
+    
+    from tqdm import tqdm
+    for item in tqdm(list(test_df.itertuples(index=False)), desc="Formatting Prompts"):
         user_content = (
             item.prompt
             + "\nPlease put your final answer inside `\\boxed{}`. For example: `\\boxed{your answer}`"
@@ -618,16 +645,18 @@ def generate_predictions(
             prompt = user_content
         prompts.append(prompt)
 
-    # Generate predictions using continuous batching
+    print(f"Starting generation for {len(test_df)} items with lora_path={lora_path}...", file=sys.stderr)
     outputs = llm.generate(
         prompts,
         sampling_params=sampling_params,
         lora_request=LoRARequest("adapter", 1, lora_path),
+        use_tqdm=True
     )
+    print("Generation complete! Extracting answers...", file=sys.stderr)
 
     predictions = []
     debug_records = []
-    for item, output in zip(test_df.itertuples(index=False), outputs):
+    for item, output in tqdm(list(zip(test_df.itertuples(index=False), outputs)), desc="Extracting Answers", total=len(outputs)):
         raw_text = output.outputs[0].text
         extracted_answer = extract_final_answer(raw_text)
 
@@ -785,6 +814,7 @@ if TEST_GENERATION:
         max_lora_rank=max_lora_rank,
         enable_prefix_caching=True,
         enable_chunked_prefill=True,
+        disable_log_stats=False,
     )
 
     sampling_params = SamplingParams(
@@ -799,7 +829,7 @@ if TEST_GENERATION:
 
 # %% [code] {"execution":{"iopub.status.busy":"2026-04-08T00:46:19.493989Z","iopub.execute_input":"2026-04-08T00:46:19.494221Z","iopub.status.idle":"2026-04-08T00:46:21.102942Z","shell.execute_reply.started":"2026-04-08T00:46:19.494196Z","shell.execute_reply":"2026-04-08T00:46:21.101877Z"},"jupyter":{"outputs_hidden":false}}
 import pandas as pd
-df = pd.read_csv("/kaggle/input/nvidia-nemotron-3-reasoning-challenge/train.csv")
+df = pd.read_csv("/kaggle/input/competitions/nvidia-nemotron-model-reasoning-challenge/train.csv")
 
 problem_set = {
     # bit_manipulation
@@ -927,9 +957,6 @@ problem_set = {
     "b61e875a", "7418fc5e", "58f02dad", "1bf3f0f1", "a575e7b7", "37519088", "3e26fa1b", "8affee55",
 }
 
-# change the variable name to run the shorter version
-# backup_problem_set
-# problem_set
 backup_problem_set = {
     # bit_manipulation
     "836b85e8", "b20b39bf", "af358750", "3f9bd1e7", "0528d502", "9992bbd0", "812131f1", "84e3f9f7",  # min_lp: -20.0965 .. -18.6948
@@ -962,15 +989,20 @@ backup_problem_set = {
     "082c1a06", "3dcaf042", "87342969", "8e1cff16", "d566ff0e", "598af975", "51a22965", "d3d82844",  # min_lp: -22.2500 .. -20.1875
     "e6157d05", "cd1280b0", "bbb61c3a", "740e0460", "be2416ec", "63ec749f", "26e6819a", "99948ad9",  # min_lp: -19.7500 .. -17.4077
 }
-# df = df[df.id.isin(problem_set)].copy()
+# change the variable name to run the shorter version
+problem_set = backup_problem_set
+df = df[df.id.isin(problem_set)].copy()
 
 # %% [code] {"jupyter":{"outputs_hidden":false}}
 problem_texts = list(df["prompt"])
 
 if TEST_GENERATION:
+    print("Initialized vLLM engine! Loading tokenizers...", file=sys.stderr)
     tokenizer = llm.get_tokenizer()
     prompts = []
-    for problem_text in problem_texts:
+    
+    from tqdm import tqdm
+    for problem_text in tqdm(problem_texts, desc="Formatting Prompts"):
         # Format using the tokenizer's chat template directly
         prompt = tokenizer.apply_chat_template(
             [{"role": "user", "content": problem_text}],
@@ -991,6 +1023,7 @@ if TEST_GENERATION:
 
 # %% [code] {"execution":{"iopub.status.busy":"2026-03-22T22:56:50.410006Z","iopub.status.idle":"2026-03-22T22:56:50.410073Z","shell.execute_reply.started":"2026-03-22T22:56:50.410038Z","shell.execute_reply":"2026-03-22T22:56:50.410043Z"},"jupyter":{"outputs_hidden":false}}
 print(os.listdir("."))
+print("Submission packaging complete! Notebook finished successfully.", file=sys.stderr)
 
 # %% [code] {"execution":{"iopub.status.busy":"2026-03-22T22:56:50.410308Z","iopub.status.idle":"2026-03-22T22:56:50.410377Z","shell.execute_reply.started":"2026-03-22T22:56:50.410342Z","shell.execute_reply":"2026-03-22T22:56:50.410347Z"},"jupyter":{"outputs_hidden":false}}
 possible_extraction_dirs = {
@@ -1022,11 +1055,14 @@ print(lora_path)
 # %% [code] {"execution":{"iopub.status.busy":"2026-03-22T22:56:50.411535Z","iopub.status.idle":"2026-03-22T22:56:50.411601Z","shell.execute_reply.started":"2026-03-22T22:56:50.411566Z","shell.execute_reply":"2026-03-22T22:56:50.411571Z"},"jupyter":{"outputs_hidden":false}}
 # Generate predictions using continuous batching (with adapter)
 if TEST_GENERATION:
+    print(f"Starting generation for {len(prompts)} prompts with lora={lora_path}...")
     outputs = llm.generate(
         prompts,
         sampling_params=sampling_params,
         lora_request=LoRARequest("adapter", 1, lora_path),
+        use_tqdm=True
     )
+    print("Generation complete!")
     df["output"] = [output.outputs[0].text for output in outputs]
     df["predicted"] = df["output"].apply(extract_final_answer)
     df["correct"] = df.apply(lambda row: verify(str(row["answer"]), str(row["predicted"])), axis=1)
@@ -1043,6 +1079,7 @@ if TEST_GENERATION:
 import zipfile as _zf
 
 print(os.listdir("."))
+print("Submission packaging complete! Notebook finished successfully.", file=sys.stderr)
 shutil.rmtree("reference", ignore_errors=True)
 with _zf.ZipFile("submission.zip", "w", _zf.ZIP_DEFLATED) as zf:
     for file in os.listdir("."):
@@ -1059,3 +1096,4 @@ if TEST_GENERATION:
 
 # %% [code] {"jupyter":{"outputs_hidden":false},"execution":{"iopub.status.busy":"2026-03-22T22:56:50.412155Z","iopub.status.idle":"2026-03-22T22:56:50.412227Z","shell.execute_reply.started":"2026-03-22T22:56:50.412190Z","shell.execute_reply":"2026-03-22T22:56:50.412195Z"}}
 print(os.listdir("."))
+print("Submission packaging complete! Notebook finished successfully.", file=sys.stderr)

@@ -14,3 +14,4 @@ training/
 .env
 reasoning/
 corpus/
+generated_notebooks/
