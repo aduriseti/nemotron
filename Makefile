@@ -1,5 +1,10 @@
 .PHONY: all reasoning corpus train upload setup help
 
+ifneq (,$(wildcard ./.env))
+    include .env
+    export
+endif
+
 # Default target: run the full pipeline
 all: reasoning corpus train upload notebook
 
@@ -23,6 +28,10 @@ upload:
 # 5. Push and run the evaluation notebook on Kaggle
 notebook:
 	uv run python3 push_notebook.py
+
+# 6. Push and run the validation notebook on Kaggle
+validate:
+	uv run python3 push_validation.py
 
 # Helper: Set up Modal authentication
 setup:

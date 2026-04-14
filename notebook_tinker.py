@@ -1072,6 +1072,31 @@ if TEST_GENERATION:
         for output in outputs
     ]
 
+    print(f"Accuracy: {df['correct'].mean():.4f}")
+    print(f"Min Logprob Stats:\n{df['minlogprob'].describe()}")
+
+    print("\n--- INCORRECT SAMPLES ---")
+    incorrect_df = df[~df["correct"]]
+    for i, row in incorrect_df.head(3).iterrows():
+        print(f"ID: {row['id']}")
+        print(f"Prompt: {row['prompt'][:200]}...")
+        print(f"Answer: {row['answer']}")
+        print(f"Predicted: {row['predicted']}")
+        print(f"Min Logprob: {row['minlogprob']}")
+        print(f"Output: {row['output'][-500:]}")
+        print("-" * 40)
+
+    print("\n--- CORRECT SAMPLES ---")
+    correct_df = df[df["correct"]]
+    for i, row in correct_df.head(3).iterrows():
+        print(f"ID: {row['id']}")
+        print(f"Prompt: {row['prompt'][:200]}...")
+        print(f"Answer: {row['answer']}")
+        print(f"Predicted: {row['predicted']}")
+        print(f"Min Logprob: {row['minlogprob']}")
+        print(f"Output: {row['output'][-500:]}")
+        print("-" * 40)
+
 # %% [markdown] {"jupyter":{"outputs_hidden":false}}
 # # Produce submission
 
