@@ -1,10 +1,10 @@
-import re
 import sys
 import pandas as pd
 import tqdm
 import json
+import re
 import signal
-from typing import Any, List, Dict, Tuple, Callable, Optional
+from typing import Any
 from constraint import Problem, AllDifferentConstraint
 
 class TimeoutException(Exception):
@@ -21,31 +21,20 @@ if WORKSPACE_DIR not in sys.path: sys.path.append(WORKSPACE_DIR)
 from reasoners.store_types import Problem as NemotronProblem
 
 # =============================================================================
-# GRAMMAR AND CONSTRAINT DEFINITIONS
+# GRAMMAR AND ALGEBRAIC GENERATORS
 # =============================================================================
 
-def make_num(digits: List[int]) -> int:
+def make_num(digits):
     """Calculates the integer value of a list of integer digits (e.g. [1, 2] -> 12)"""
     return sum(d * (10**(len(digits)-1-i)) for i, d in enumerate(digits))
 
 # Pre-Ops: Return a tuple of lambdas that evaluate the Left and Right operands
-def gen_pre_abcd(A_syms: List[str], B_syms: List[str]):
-    return (lambda m: make_num([m[s] for s in A_syms]), lambda m: make_num([m[s] for s in B_syms]))
-
-def gen_pre_badc(A_syms: List[str], B_syms: List[str]):
-    return (lambda m: make_num([m[s] for s in A_syms[::-1]]), lambda m: make_num([m[s] for s in B_syms[::-1]]))
-
-def gen_pre_cdab(A_syms: List[str], B_syms: List[str]):
-    return (lambda m: make_num([m[s] for s in B_syms]), lambda m: make_num([m[s] for s in A_syms]))
-
-def gen_pre_dcba(A_syms: List[str], B_syms: List[str]):
-    return (lambda m: make_num([m[s] for s in B_syms[::-1]]), lambda m: make_num([m[s] for s in A_syms[::-1]]))
-
+# They now take an ordered list of integer digits corresponding to the symbols in A and B
 PRE_OPS = {
-    'ABCD': gen_pre_abcd,
-    'BADC': gen_pre_badc,
-    'CDAB': gen_pre_cdab,
-    'DCBA': gen_pre_dcba
+    'ABCD': lambda A_vals, B_vals: (make_num(A_vals), make_num(B_vals)),
+    'BADC': lambda A_vals, B_vals: (make_num(A_vals[::-1]), make_num(B_vals[::-1])),
+    'CDAB': lambda A_vals, B_vals: (make_num(B_vals), make_num(A_vals)),
+    'DCBA': lambda A_vals, B_vals: (make_num(B_vals[::-1]), make_num(A_vals[::-1]))
 }
 
 # Mid-Ops: Standard mathematical operations
@@ -64,8 +53,8 @@ MID_OPS = {
     'mod': lambda L, R: max(L, R) % min(L, R) if min(L, R) != 0 else max(L, R)
 }
 
-# Post-Ops: Check if the mathematical result matches the expected symbol output
-def check_post(expected_val: int, out_vals: List[int], f_type: str, is_negative: bool) -> bool:
+# Post-Ops: Check if the mathematical result matches the expected output digits
+def check_post(expected_val, out_vals, f_type, is_negative):
     if expected_val is None: return False
     s_exp = str(expected_val)
     if is_negative and not s_exp.startswith('-'): return False
@@ -84,200 +73,216 @@ def check_post(expected_val: int, out_vals: List[int], f_type: str, is_negative:
         
     return False
 
+# The 6 global formatting combinations from the EDA
+PIPELINES = [
+    ('BADC', 'swap'), ('DCBA', 'swap'),
+    ('BADC', 'rev'), ('DCBA', 'rev'),
+    ('ABCD', 'raw'), ('CDAB', 'raw')
+]
+
+# Sort formatting pipelines by empirical frequency
+try:
+    with open('/workspaces/nemotron/reasoners/equation_numeric_grammar/pipeline_frequencies.json', 'r') as f:
+        freqs = json.load(f)
+    combo_freqs = {}
+    for k, v in freqs.items():
+        parts = k.split(' -> ')
+        if len(parts) >= 3:
+            combo = (parts[0], parts[2])
+            combo_freqs[combo] = combo_freqs.get(combo, 0.0) + v
+    PIPELINES.sort(key=lambda c: combo_freqs.get(c, 0.0), reverse=True)
+except Exception:
+    pass
+
+
 # =============================================================================
 # PROBLEM PARSING
 # =============================================================================
 
-def extract_examples(prompt: str) -> Tuple[Optional[str], List[Dict[str, Any]], Tuple[List[str], List[str]], List[str], str, str]:
-    """Extracts and parses all examples and targets from the prompt."""
+def extract_all_examples(prompt: str):
     lines = [l.strip() for l in prompt.split('\n') if '=' in l and 'determine' not in l.lower()]
-    all_examples = []
+    
+    parsed_examples = []
+    unique_digit_syms = set()
+    unique_op_syms = set()
     
     for line in lines:
-        m = re.search(r'(\S{2})(\S)(\S{2})\s*=\s*(\S+)', line)
-        if m: all_examples.append(m.groups())
-            
-    target_m = re.search(r'result for:\s*(\S{2})(\S)(\S{2})', prompt)
-    if not target_m: return None, [], ([], []), [], "", ""
-    
-    tA_str, tgt_op, tB_str = target_m.groups()
-    op_examples_raw = [(ex[0], ex[2], ex[3]) for ex in all_examples if ex[1] == tgt_op]
-    
-    if not op_examples_raw:
-        return tgt_op, [], (list(tA_str), list(tB_str)), [], "", ""
-
-    # Determine symbol bleed (prefix/suffix on the answer)
-    ex_res_0 = op_examples_raw[0][2]
-    prefix = tgt_op if ex_res_0.startswith(tgt_op) else ""
-    suffix = tgt_op if ex_res_0.endswith(tgt_op) else ""
-
-    unique_symbols = set()
-    parsed_examples = []
-    
-    for exA, exB, ex_res in op_examples_raw:
-        clean_res = ex_res.replace(tgt_op, '')
+        m = re.search(r'^(\S{2})(\S)(\S{2})\s*=\s*(\S+)$', line)
+        if not m: continue
+        
+        left_syms_A, op_sym, left_syms_B, right_str = m.groups()
+        
         is_neg = False
-        if clean_res.startswith('-'):
+        if right_str.startswith('-'):
             is_neg = True
-            clean_res = clean_res[1:]
+            right_str = right_str[1:]
             
-        A_syms = list(exA)
-        B_syms = list(exB)
-        out_syms = list(clean_res)
+        # Handle potential symbol bleed in the answer string
+        # If the operator symbol appears as a prefix/suffix, strip it for math evaluation
+        prefix_bleed = right_str.startswith(op_sym)
+        suffix_bleed = right_str.endswith(op_sym)
+        
+        if prefix_bleed: right_str = right_str[len(op_sym):]
+        if suffix_bleed: right_str = right_str[:-len(op_sym)]
+        
+        out_syms = list(right_str)
         
         parsed_examples.append({
-            'A': A_syms,
-            'B': B_syms,
+            'A': list(left_syms_A),
+            'B': list(left_syms_B),
+            'op': op_sym,
             'out': out_syms,
-            'is_neg': is_neg
+            'is_neg': is_neg,
+            'prefix': prefix_bleed,
+            'suffix': suffix_bleed
         })
         
-        unique_symbols.update(A_syms + B_syms + out_syms)
+        unique_digit_syms.update(list(left_syms_A) + list(left_syms_B) + out_syms)
+        unique_op_syms.add(op_sym)
         
-    tA, tB = list(tA_str), list(tB_str)
-    unique_symbols.update(tA + tB)
+    target_m = re.search(r'result for:\s*(\S{2})(\S)(\S{2})', prompt)
+    if not target_m: return None, [], set(), set(), ("", "", "")
     
-    return tgt_op, parsed_examples, (tA, tB), list(unique_symbols), prefix, suffix
-
-# =============================================================================
-# CONSTRAINT GENERATOR
-# =============================================================================
-
-def generate_constraints(problem: Problem, parsed_examples: List[Dict[str, Any]], sym_list: List[str], pipeline: Tuple[str, str, str]):
-    """
-    Generates and attaches the specific constraints for a given pipeline
-    to the provided python-constraint Problem object.
-    """
-    p, m, f = pipeline
+    tA_str, tgt_op, tB_str = target_m.groups()
+    tA = list(tA_str)
+    tB = list(tB_str)
     
-    # Base constraints
-    problem.addVariables(sym_list, range(10))
-    problem.addConstraint(AllDifferentConstraint())
+    unique_digit_syms.update(tA + tB)
+    unique_op_syms.add(tgt_op)
+    
+    return tgt_op, parsed_examples, unique_digit_syms, unique_op_syms, (tA_str, tgt_op, tB_str)
 
-    # Leading zeros constraint
-    for ex in parsed_examples:
-        if len(ex['A']) > 1: problem.addConstraint(lambda x: x != 0, [ex['A'][0]])
-        if len(ex['B']) > 1: problem.addConstraint(lambda x: x != 0, [ex['B'][0]])
-        if len(ex['out']) > 1: problem.addConstraint(lambda x: x != 0, [ex['out'][0]])
-
-    # The mathematical rule constraints
-    for ex in parsed_examples:
-        ex_syms = list(set(ex['A'] + ex['B'] + ex['out']))
-        
-        eval_L, eval_R = PRE_OPS[p](ex['A'], ex['B'])
-        eval_mid = MID_OPS[m]
-        
-        # We must create a closure to capture the loop variables correctly
-        def make_ex_constraint(e_L, e_R, e_mid, e_out, e_is_neg, e_f, e_syms):
-            def generated_constraint(*args):
-                mapping = dict(zip(e_syms, args))
-                try:
-                    L = e_L(mapping)
-                    R = e_R(mapping)
-                    expected_val = e_mid(L, R)
-                    
-                    out_vals = [mapping[s] for s in e_out]
-                    return check_post(expected_val, out_vals, e_f, e_is_neg)
-                except Exception:
-                    return False
-            return generated_constraint
-            
-        problem.addConstraint(
-            make_ex_constraint(eval_L, eval_R, eval_mid, ex['out'], ex['is_neg'], f, ex_syms), 
-            ex_syms
-        )
 
 # =============================================================================
 # SOLVER
 # =============================================================================
 
-def load_combos():
-    base_pipelines = [
-        ('BADC', 'swap'), ('DCBA', 'swap'),
-        ('BADC', 'rev'), ('DCBA', 'rev'),
-        ('ABCD', 'raw'), ('CDAB', 'raw')
-    ]
-    combos = [(p, m, f) for (p, f) in base_pipelines for m in MID_OPS.keys()]
-    
-    try:
-        with open('/workspaces/nemotron/reasoners/equation_numeric_grammar/pipeline_frequencies.json', 'r') as f:
-            freqs = json.load(f)
-        combo_freqs = {}
-        for k, v in freqs.items():
-            parts = k.split(' -> ')
-            if len(parts) >= 3:
-                c = (parts[0], parts[1], parts[2])
-                combo_freqs[c] = combo_freqs.get(c, 0.0) + v
-        combos.sort(key=lambda c: combo_freqs.get(c, 0.0), reverse=True)
-    except Exception:
-        pass
-        
-    return combos
-
-COMBOS = load_combos()
-
-def solve_cipher_digit(prompt: str, target_answer: str = None, mode: str = 'greedy') -> Any:
-    tgt_op, parsed_examples, (tA, tB), sym_list, prefix, suffix = extract_examples(prompt)
+def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'greedy') -> Any:
+    tgt_op, parsed_examples, digit_syms, op_syms, (tA, tgt_op_str, tB) = extract_all_examples(prompt)
     
     if not tgt_op or not parsed_examples: return None
-    if len(sym_list) > 10: return None
+    
+    # 1. IMMEDIATE REJECTION: Too many symbols for a base-10 bijective cipher
+    if len(digit_syms) > 10:
+        return False if mode == 'theoretical' else None
 
-    # Length check (our grammar requires 2-digit operands)
+    # 2. IMMEDIATE REJECTION: Length Compatibility
     for ex in parsed_examples:
-        if len(ex['A']) != 2 or len(ex['B']) != 2: return None
-    if len(tA) != 2 or len(tB) != 2: return None
+        if len(ex['A']) != 2 or len(ex['B']) != 2:
+            return False if mode == 'theoretical' else None
+    if len(tA) != 2 or len(tB) != 2:
+        return False if mode == 'theoretical' else None
 
+    digit_sym_list = list(digit_syms)
+    op_sym_list = list(op_syms)
+    
     possible_answers = set()
     
-    for p, m, f in COMBOS:
+    # Loop over the 6 global formatting pipelines
+    for p, f in PIPELINES:
         problem = Problem()
         
-        # 1) Generate and attach all constraints for THIS pipeline
-        generate_constraints(problem, parsed_examples, sym_list, (p, m, f))
+        # --- ADD VARIABLES ---
+        # Digits get 0-9
+        problem.addVariables(digit_sym_list, range(10))
+        problem.addConstraint(AllDifferentConstraint(), digit_sym_list)
+        
+        # Operators get the string names of the 12 math functions
+        problem.addVariables(op_sym_list, list(MID_OPS.keys()))
+        
+        # --- BASE CONSTRAINTS ---
+        # Leading digits cannot be 0
+        for ex in parsed_examples:
+            if len(ex['A']) > 1: problem.addConstraint(lambda x: x != 0, [ex['A'][0]])
+            if len(ex['B']) > 1: problem.addConstraint(lambda x: x != 0, [ex['B'][0]])
+            if len(ex['out']) > 1: problem.addConstraint(lambda x: x != 0, [ex['out'][0]])
+        if len(tA) > 1: problem.addConstraint(lambda x: x != 0, [tA[0]])
+        if len(tB) > 1: problem.addConstraint(lambda x: x != 0, [tB[0]])
 
-        # 2) Solve with timeout since some paths might hang without native bounds pruning
+        # --- DYNAMIC MATH CONSTRAINTS PER EXAMPLE ---
+        for ex in parsed_examples:
+            # The variables involved in this specific equation
+            ex_digit_syms = list(set(ex['A'] + ex['B'] + ex['out']))
+            
+            # We must create a closure to capture the loop variables correctly
+            def make_ex_constraint(current_ex, current_digit_syms, p_type, f_type):
+                def ex_check(*args):
+                    # args will contain: [digit_val_1, digit_val_2, ..., op_name]
+                    digit_vals = args[:-1]
+                    op_name = args[-1]
+                    
+                    mapping = dict(zip(current_digit_syms, digit_vals))
+                    
+                    A_vals = [mapping[s] for s in current_ex['A']]
+                    B_vals = [mapping[s] for s in current_ex['B']]
+                    out_vals = [mapping[s] for s in current_ex['out']]
+                    
+                    try:
+                        L, R = PRE_OPS[p_type](A_vals, B_vals)
+                        expected_val = MID_OPS[op_name](L, R)
+                        return check_post(expected_val, out_vals, f_type, current_ex['is_neg'])
+                    except Exception:
+                        return False
+                return ex_check
+                
+            # Attach constraint: variables = [digit symbols] + [the operator symbol]
+            problem.addConstraint(
+                make_ex_constraint(ex, ex_digit_syms, p, f), 
+                ex_digit_syms + [ex['op']]
+            )
+            
+        # --- SOLVE CSP ---
+        # 2-second timeout per global formatting pipeline
         try:
             signal.alarm(2)
             solutions = problem.getSolutions()
             signal.alarm(0)
         except TimeoutException:
             continue
-        
-        # 3) Process results
+            
         if solutions:
-            for mapping in solutions:
-                eval_tL, eval_tR = PRE_OPS[p](tA, tB)
+            for sol in solutions:
+                # Separate digit mapping from operator mapping
+                digit_map = {sym: sol[sym] for sym in digit_sym_list}
+                op_map = {sym: sol[sym] for sym in op_sym_list}
+                
+                tA_vals = [digit_map[s] for s in tA]
+                tB_vals = [digit_map[s] for s in tB]
+                tgt_math_op = op_map[tgt_op_str]
                 
                 try:
-                    L = eval_tL(mapping)
-                    R = eval_tR(mapping)
-                    numeric_ans = MID_OPS[m](L, R)
+                    L, R = PRE_OPS[p](tA_vals, tB_vals)
+                    numeric_ans = MID_OPS[tgt_math_op](L, R)
                 except Exception:
                     continue
 
                 if numeric_ans is None: continue
                 
-                # Format
+                # Format numeric answer
                 s_val = str(numeric_ans)
                 if f == 'rev': s_val = s_val[::-1]
                 elif f == 'swap':
                     s_val = '-' + s_val[1:][::-1] if s_val.startswith('-') else s_val[::-1]
                     
-                # Re-encode to symbols
-                inv_map = {v: k for k, v in mapping.items()}
+                # Encode back to symbols
+                inv_digit_map = {v: k for k, v in digit_map.items()}
                 encoded_ans = ""
                 can_encode = True
                 
                 for char in s_val:
                     if char == '-': encoded_ans += '-'
                     else:
-                        if int(char) not in inv_map:
+                        digit_int = int(char)
+                        if digit_int not in inv_digit_map:
                             can_encode = False
                             break
-                        encoded_ans += inv_map[int(char)]
+                        encoded_ans += inv_digit_map[digit_int]
                         
                 if can_encode:
-                    encoded_ans = prefix + encoded_ans + suffix
+                    # Restore symbol bleed if the FIRST example had it
+                    if parsed_examples[0]['prefix']: encoded_ans = tgt_op_str + encoded_ans
+                    if parsed_examples[0]['suffix']: encoded_ans = encoded_ans + tgt_op_str
+                    
                     if mode == 'greedy': return encoded_ans
                     possible_answers.add(encoded_ans)
 
@@ -302,11 +307,12 @@ if __name__ == "__main__":
 
     correct = 0
     total = 0
-    for _, row in tqdm.tqdm(df_crypt.head(50).iterrows(), total=min(50, len(df_crypt))):
+    # Testing 10 problems to observe the massive speedup and accuracy
+    for _, row in tqdm.tqdm(df_crypt.head(10).iterrows(), total=min(10, len(df_crypt))):
         total += 1
         prompt = row['prompt']
         ans = str(row['answer'])
-        pred = solve_cipher_digit(prompt)
+        pred = solve_cipher_unified(prompt, mode='greedy')
         if pred == ans:
             correct += 1
             print(f"\n[CORRECT] Problem {row['id']}: {pred} == {ans}")
