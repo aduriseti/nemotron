@@ -29,7 +29,6 @@ def make_num(digits):
     return sum(d * (10**(len(digits)-1-i)) for i, d in enumerate(digits))
 
 # Pre-Ops: Return a tuple of lambdas that evaluate the Left and Right operands
-# They now take an ordered list of integer digits corresponding to the symbols in A and B
 PRE_OPS = {
     'ABCD': lambda A_vals, B_vals: (make_num(A_vals), make_num(B_vals)),
     'BADC': lambda A_vals, B_vals: (make_num(A_vals[::-1]), make_num(B_vals[::-1])),
@@ -94,7 +93,6 @@ try:
 except Exception:
     pass
 
-
 # =============================================================================
 # PROBLEM PARSING
 # =============================================================================
@@ -103,8 +101,7 @@ def extract_all_examples(prompt: str):
     lines = [l.strip() for l in prompt.split('\n') if '=' in l and 'determine' not in l.lower()]
     
     parsed_examples = []
-    unique_digit_syms = set()
-    unique_op_syms = set()
+    unique_syms = set()
     
     for line in lines:
         m = re.search(r'^(\S{2})(\S)(\S{2})\s*=\s*(\S+)$', line)
@@ -118,7 +115,6 @@ def extract_all_examples(prompt: str):
             right_str = right_str[1:]
             
         # Handle potential symbol bleed in the answer string
-        # If the operator symbol appears as a prefix/suffix, strip it for math evaluation
         prefix_bleed = right_str.startswith(op_sym)
         suffix_bleed = right_str.endswith(op_sym)
         
@@ -137,20 +133,21 @@ def extract_all_examples(prompt: str):
             'suffix': suffix_bleed
         })
         
-        unique_digit_syms.update(list(left_syms_A) + list(left_syms_B) + out_syms)
-        unique_op_syms.add(op_sym)
+        unique_syms.update(list(left_syms_A) + list(left_syms_B) + out_syms + [op_sym])
         
     target_m = re.search(r'result for:\s*(\S{2})(\S)(\S{2})', prompt)
-    if not target_m: return None, [], set(), set(), ("", "", "")
-    
+    if not target_m: 
+        print("DEBUG: Target mismatch")
+        return None, [], set(), set(), ("", "", "")
+
     tA_str, tgt_op, tB_str = target_m.groups()
     tA = list(tA_str)
     tB = list(tB_str)
-    
-    unique_digit_syms.update(tA + tB)
-    unique_op_syms.add(tgt_op)
-    
-    return tgt_op, parsed_examples, unique_digit_syms, unique_op_syms, (tA_str, tgt_op, tB_str)
+
+    unique_syms.update(tA + tB + [tgt_op])
+
+    print(f"DEBUG: Parsed {len(parsed_examples)} examples. Tgt: {tA_str} {tgt_op} {tB_str}")
+    return tgt_op, parsed_examples, unique_syms, (tA_str, tgt_op, tB_str)
 
 
 # =============================================================================
@@ -158,12 +155,34 @@ def extract_all_examples(prompt: str):
 # =============================================================================
 
 def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'greedy') -> Any:
-    tgt_op, parsed_examples, digit_syms, op_syms, (tA, tgt_op_str, tB) = extract_all_examples(prompt)
-    
+    extract_result = extract_all_examples(prompt)
+    if len(extract_result) == 4:
+        tgt_op, parsed_examples, unique_syms, (tA, tgt_op_str, tB) = extract_result
+    else:
+        # In case the old signature was somehow preserved
+        tgt_op, parsed_examples, digit_syms, op_syms, (tA, tgt_op_str, tB) = extract_result
+        unique_syms = set(list(digit_syms) + list(op_syms))
+        
     if not tgt_op or not parsed_examples: return None
     
-    # 1. IMMEDIATE REJECTION: Too many symbols for a base-10 bijective cipher
-    if len(digit_syms) > 10:
+    # Identify which symbols act as operators in the 3rd position
+    op_symbols = set(ex['op'] for ex in parsed_examples)
+    op_symbols.add(tgt_op_str)
+    
+    # We must map ALL unique symbols to digits (0-9) to solve the puzzle fully.
+    # Wait, can a symbol be an operator AND a digit? Yes.
+    # But if a symbol is ONLY ever used as an operator, it doesn't strictly need a digit mapping.
+    # However, to be safe and enforce the 1-to-1 cipher, we assume ALL symbols (up to 10) are digits.
+    # And separately, the operator symbols map to math functions.
+    
+    # NEW LOGIC: Only count symbols that are used as digits (A, B, out) towards the 10-limit!
+    digit_only_syms = set()
+    for ex in parsed_examples:
+        digit_only_syms.update(ex['A'] + ex['B'] + ex['out'])
+    digit_only_syms.update(tA + tB)
+    
+    if len(digit_only_syms) > 10:
+        # If there are >10 DIGIT symbols, it breaks our base-10 bijective mapping.
         return False if mode == 'theoretical' else None
 
     # 2. IMMEDIATE REJECTION: Length Compatibility
@@ -173,8 +192,10 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
     if len(tA) != 2 or len(tB) != 2:
         return False if mode == 'theoretical' else None
 
-    digit_sym_list = list(digit_syms)
-    op_sym_list = list(op_syms)
+    digit_sym_list = list(digit_only_syms)
+    op_sym_list = list(op_symbols)
+    
+    print(f"DEBUG: Digits({len(digit_sym_list)}): {digit_sym_list} | Ops: {op_sym_list}")
     
     possible_answers = set()
     
@@ -183,12 +204,15 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
         problem = Problem()
         
         # --- ADD VARIABLES ---
-        # Digits get 0-9
+        # 1. Digits get 0-9
         problem.addVariables(digit_sym_list, range(10))
         problem.addConstraint(AllDifferentConstraint(), digit_sym_list)
         
-        # Operators get the string names of the 12 math functions
-        problem.addVariables(op_sym_list, list(MID_OPS.keys()))
+        # 2. Operators get the string names of the 12 math functions
+        # We append '_op' to the variable name so it doesn't collide with the digit variable
+        # if a symbol acts as both!
+        op_vars = [f"{sym}_op" for sym in op_sym_list]
+        problem.addVariables(op_vars, list(MID_OPS.keys()))
         
         # --- BASE CONSTRAINTS ---
         # Leading digits cannot be 0
@@ -203,8 +227,8 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
         for ex in parsed_examples:
             # The variables involved in this specific equation
             ex_digit_syms = list(set(ex['A'] + ex['B'] + ex['out']))
+            ex_op_var = f"{ex['op']}_op"
             
-            # We must create a closure to capture the loop variables correctly
             def make_ex_constraint(current_ex, current_digit_syms, p_type, f_type):
                 def ex_check(*args):
                     # args will contain: [digit_val_1, digit_val_2, ..., op_name]
@@ -221,30 +245,39 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                         L, R = PRE_OPS[p_type](A_vals, B_vals)
                         expected_val = MID_OPS[op_name](L, R)
                         return check_post(expected_val, out_vals, f_type, current_ex['is_neg'])
-                    except Exception:
+                    except Exception as e:
+                        # Silently fail on math exceptions like ZeroDivisionError
                         return False
                 return ex_check
                 
             # Attach constraint: variables = [digit symbols] + [the operator symbol]
             problem.addConstraint(
                 make_ex_constraint(ex, ex_digit_syms, p, f), 
-                ex_digit_syms + [ex['op']]
+                ex_digit_syms + [ex_op_var]
             )
             
         # --- SOLVE CSP ---
         # 2-second timeout per global formatting pipeline
         try:
-            signal.alarm(2)
-            solutions = problem.getSolutions()
+            print(f"DEBUG: Solving CSP for pipeline {p}->{f}")
+            signal.alarm(10)
+            solution = problem.getSolution()
             signal.alarm(0)
+            if solution:
+                solutions = [solution]
+                print(f"DEBUG: 1 Solution found for {p}->{f}")
+            else:
+                solutions = []
+                print(f"DEBUG: 0 Solutions found for {p}->{f}")
         except TimeoutException:
+            print(f"DEBUG: Timeout for {p}->{f}")
             continue
             
         if solutions:
             for sol in solutions:
                 # Separate digit mapping from operator mapping
                 digit_map = {sym: sol[sym] for sym in digit_sym_list}
-                op_map = {sym: sol[sym] for sym in op_sym_list}
+                op_map = {sym: sol[f"{sym}_op"] for sym in op_sym_list}
                 
                 tA_vals = [digit_map[s] for s in tA]
                 tB_vals = [digit_map[s] for s in tB]
@@ -274,6 +307,8 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                     else:
                         digit_int = int(char)
                         if digit_int not in inv_digit_map:
+                            # Safety check: if answer requires a digit we didn't map, we can't solve it.
+                            print(f"DEBUG: Found solution but missing digit {digit_int} in mapping")
                             can_encode = False
                             break
                         encoded_ans += inv_digit_map[digit_int]
@@ -307,7 +342,7 @@ if __name__ == "__main__":
 
     correct = 0
     total = 0
-    # Testing 10 problems to observe the massive speedup and accuracy
+    # Testing specific problems
     for _, row in tqdm.tqdm(df_crypt.head(10).iterrows(), total=min(10, len(df_crypt))):
         total += 1
         prompt = row['prompt']
