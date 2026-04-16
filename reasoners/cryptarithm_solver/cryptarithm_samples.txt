@@ -1,0 +1,536 @@
+=== Problem 1 | ID: 00457d26 ===
+Target Answer: @&
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+`!*[{ = '"[`
+\'*'> = ![@
+\'-!` = \\
+`!*\& = '@'{
+Now, determine the result for: [[-!'
+----------------------------------------
+Parsed Equations:
+  [Len 5] `! * [{ = '"[`
+  [Len 5] \' * '> = ![@
+  [Len 5] \' - !` = \\
+  [Len 5] `! * \& = '@'{
+Target Question: [[ - !'
+
+
+=== Problem 2 | ID: 00c032a8 ===
+Target Answer: \^?
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+}`]?( = ())
+}#<)\ = #?
+?(!&& = #@@#
+(?!@` = )#))
+Now, determine the result for: ))!\)
+----------------------------------------
+Parsed Equations:
+  [Len 5] }` ] ?( = ())
+  [Len 5] }# < )\ = #?
+  [Len 5] ?( ! && = #@@#
+  [Len 5] (? ! @` = )#))
+Target Question: )) ! \)
+
+
+=== Problem 3 | ID: 012cab1f ===
+Target Answer: |@{
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+`(]&: = %@#:
+&{>`% = {{
+("'%: = {@{
+:%>&: = :"
+`('"@ = %@{
+Now, determine the result for: {`'(&
+----------------------------------------
+Parsed Equations:
+  [Len 5] `( ] &: = %@#:
+  [Len 5] &{ > `% = {{
+  [Len 5] (" ' %: = {@{
+  [Len 5] :% > &: = :"
+  [Len 5] `( ' "@ = %@{
+Target Question: {` ' (&
+
+
+=== Problem 4 | ID: 0133bcec ===
+Target Answer: \([#
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+%|*"| = %|"|
+\(*[^ = \([^
+(%+[@ = (%[@
+|[*([ = |[([
+[^-[( = -^
+Now, determine the result for: \(*[#
+----------------------------------------
+Parsed Equations:
+  [Len 5] %| * "| = %|"|
+  [Len 5] \( * [^ = \([^
+  [Len 5] (% + [@ = (%[@
+  [Len 5] |[ * ([ = |[([
+  [Len 5] [^ - [( = -^
+Target Question: \( * [#
+
+
+=== Problem 5 | ID: 017a871e ===
+Target Answer: \:
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+#]+\# = "!
+#^-{] = ]#
+\{*\! = #\^:
+Now, determine the result for: #!-"^
+----------------------------------------
+Parsed Equations:
+  [Len 5] #] + \# = "!
+  [Len 5] #^ - {] = ]#
+  [Len 5] \{ * \! = #\^:
+Target Question: #! - "^
+
+
+=== Problem 6 | ID: 01b2aa67 ===
+Target Answer: +}
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+:|+>\ = {]
+|}&{> = ""@]
+@:^]] = {|
+|{&{{ = "{:@
+Now, determine the result for: |}+@}
+----------------------------------------
+Parsed Equations:
+  [Len 5] :| + >\ = {]
+  [Len 5] |} & {> = ""@]
+  [Len 5] @: ^ ]] = {|
+  [Len 5] |{ & {{ = "{:@
+Target Question: |} + @}
+
+
+=== Problem 7 | ID: 022c4d73 ===
+Target Answer: !'
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+//?|[ = ?:/
+)\?`| = ?':
+[)$|: = !:'
+:)$!: = )!'
+Now, determine the result for: :!?'/
+----------------------------------------
+Parsed Equations:
+  [Len 5] // ? |[ = ?:/
+  [Len 5] )\ ? `| = ?':
+  [Len 5] [) $ |: = !:'
+  [Len 5] :) $ !: = )!'
+Target Question: :! ? '/
+
+
+=== Problem 8 | ID: 02664ad5 ===
+Target Answer: :}'
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+`[-^[ = `(
+:'-') = (#
+}#+'} = [}
+Now, determine the result for: !}-(!
+----------------------------------------
+Parsed Equations:
+  [Len 5] `[ - ^[ = `(
+  [Len 5] :' - ') = (#
+  [Len 5] }# + '} = [}
+Target Question: !} - (!
+
+
+=== Problem 9 | ID: 02a04b59 ===
+Target Answer: #>]#
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+#"*/[ = #"/[
+]>+\$ = #[$
+\/+/[ = #<>
+Now, determine the result for: #>*]#
+----------------------------------------
+Parsed Equations:
+  [Len 5] #" * /[ = #"/[
+  [Len 5] ]> + \$ = #[$
+  [Len 5] \/ + /[ = #<>
+Target Question: #> * ]#
+
+
+=== Problem 10 | ID: 02b8d816 ===
+Target Answer: >$$>
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+`$+%/ = `$%/
+!$*"% = \\!"
+%`-\[ = -`>
+Now, determine the result for: >$+$>
+----------------------------------------
+Parsed Equations:
+  [Len 5] `$ + %/ = `$%/
+  [Len 5] !$ * "% = \\!"
+  [Len 5] %` - \[ = -`>
+Target Question: >$ + $>
+
+
+=== Problem 11 | ID: 02c15453 ===
+Target Answer: (
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+("-]] = '(
+"%-!@ = "
+("-%' = ])
+\@-'% = >"
+Now, determine the result for: >'-]'
+----------------------------------------
+Parsed Equations:
+  [Len 5] (" - ]] = '(
+  [Len 5] "% - !@ = "
+  [Len 5] (" - %' = ])
+  [Len 5] \@ - '% = >"
+Target Question: >' - ]'
+
+
+=== Problem 12 | ID: 035c4c40 ===
+Target Answer: ??
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+#>*%< = /(``
+/?-`< = -<
+|`->( = -/?
+##*|# = ((#
+>`*|> = /<|
+Now, determine the result for: ?<-'#
+----------------------------------------
+Parsed Equations:
+  [Len 5] #> * %< = /(``
+  [Len 5] /? - `< = -<
+  [Len 5] |` - >( = -/?
+  [Len 5] ## * |# = ((#
+  [Len 5] >` * |> = /<|
+Target Question: ?< - '#
+
+
+=== Problem 13 | ID: 03a3437f ===
+Target Answer: -!
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+/>-|/ = ':
+'>+/! = '>/!
+}!-'` = >'
+Now, determine the result for: '}-/>
+----------------------------------------
+Parsed Equations:
+  [Len 5] /> - |/ = ':
+  [Len 5] '> + /! = '>/!
+  [Len 5] }! - '` = >'
+Target Question: '} - />
+
+
+=== Problem 14 | ID: 042f1e53 ===
+Target Answer: -}
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+/%*"} = /%"}
+[/+}" = /%
+&<-[} = [|
+//*<< = //<<
+Now, determine the result for: &&-&?
+----------------------------------------
+Parsed Equations:
+  [Len 5] /% * "} = /%"}
+  [Len 5] [/ + }" = /%
+  [Len 5] &< - [} = [|
+  [Len 5] // * << = //<<
+Target Question: && - &?
+
+
+=== Problem 15 | ID: 0454705a ===
+Target Answer: %}|
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+|?'|< = }:%^
+|?+?@ = +}?
+%<+(} = +/(
+<|-<@ = }/|
+Now, determine the result for: (}'}|
+----------------------------------------
+Parsed Equations:
+  [Len 5] |? ' |< = }:%^
+  [Len 5] |? + ?@ = +}?
+  [Len 5] %< + (} = +/(
+  [Len 5] <| - <@ = }/|
+Target Question: (} ' }|
+
+
+=== Problem 16 | ID: 05109055 ===
+Target Answer: `>%/
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+%')!' = |>
+(()'> = `/
+%':'@ = @!/'
+Now, determine the result for: \(:|/
+----------------------------------------
+Parsed Equations:
+  [Len 5] %' ) !' = |>
+  [Len 5] (( ) '> = `/
+  [Len 5] %' : '@ = @!/'
+Target Question: \( : |/
+
+
+=== Problem 17 | ID: 053b4c86 ===
+Target Answer: (@(]
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+%&*#$ = $?&&
+#$*#] = ?%]]
+]%-"] = &@
+$%+"\ = $]]
+\$-?" = -\]
+Now, determine the result for: (@*]&
+----------------------------------------
+Parsed Equations:
+  [Len 5] %& * #$ = $?&&
+  [Len 5] #$ * #] = ?%]]
+  [Len 5] ]% - "] = &@
+  [Len 5] $% + "\ = $]]
+  [Len 5] \$ - ?" = -\]
+Target Question: (@ * ]&
+
+
+=== Problem 18 | ID: 05bd2dab ===
+Target Answer: [))
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+}/{/& = $}
+}}^(! = ($})
+($[)& = /!
+(}^$$ = (!}?
+(\^?} = (($/
+Now, determine the result for: '&[?!
+----------------------------------------
+Parsed Equations:
+  [Len 5] }/ { /& = $}
+  [Len 5] }} ^ (! = ($})
+  [Len 5] ($ [ )& = /!
+  [Len 5] (} ^ $$ = (!}?
+  [Len 5] (\ ^ ?} = (($/
+Target Question: '& [ ?!
+
+
+=== Problem 19 | ID: 05c36467 ===
+Target Answer: %%\
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+%$<`# = <]]
+%"/(] = #`]$
+`$<(( = <(]
+%"<\& = <$$
+#&/]( = ###"
+Now, determine the result for: "&/($
+----------------------------------------
+Parsed Equations:
+  [Len 5] %$ < `# = <]]
+  [Len 5] %" / (] = #`]$
+  [Len 5] `$ < (( = <(]
+  [Len 5] %" < \& = <$$
+  [Len 5] #& / ]( = ###"
+Target Question: "& / ($
+
+
+=== Problem 20 | ID: 06083e68 ===
+Target Answer: :::
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+!>+^$ = :`
+\^*:: = ^!\!
+$^-!$ = -<
+Now, determine the result for: >\*:!
+----------------------------------------
+Parsed Equations:
+  [Len 5] !> + ^$ = :`
+  [Len 5] \^ * :: = ^!\!
+  [Len 5] $^ - !$ = -<
+Target Question: >\ * :!
+
+
+=== Problem 21 | ID: 065abaf6 ===
+Target Answer: &/:\
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+/}-\` = ]
+](-]: = -&/
+\]+&( = &(\]
+\#-{] = -#
+:{*#\ = ((`{
+Now, determine the result for: :\+&/
+----------------------------------------
+Parsed Equations:
+  [Len 5] /} - \` = ]
+  [Len 5] ]( - ]: = -&/
+  [Len 5] \] + &( = &(\]
+  [Len 5] \# - {] = -#
+  [Len 5] :{ * #\ = ((`{
+Target Question: :\ + &/
+
+
+=== Problem 22 | ID: 08111d57 ===
+Target Answer: )"
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+](*>^ = &(:^
+::+$" = ]^^
+?"*"( = ?:(:
+>^*>) = (?"
+Now, determine the result for: ^?+)]
+----------------------------------------
+Parsed Equations:
+  [Len 5] ]( * >^ = &(:^
+  [Len 5] :: + $" = ]^^
+  [Len 5] ?" * "( = ?:(:
+  [Len 5] >^ * >) = (?"
+Target Question: ^? + )]
+
+
+=== Problem 23 | ID: 083ed8fe ===
+Target Answer: <#):
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+!(*() = (/<<
+[(*<< = [[//
+"&-/: = :)
+[!-)! = )
+Now, determine the result for: <&*:/
+----------------------------------------
+Parsed Equations:
+  [Len 5] !( * () = (/<<
+  [Len 5] [( * << = [[//
+  [Len 5] "& - /: = :)
+  [Len 5] [! - )! = )
+Target Question: <& * :/
+
+
+=== Problem 24 | ID: 08f6216d ===
+Target Answer: |>>>
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+&!-][ = `
+]!*!| = !|`
+`{+>] = >]`{
+Now, determine the result for: >>+|>
+----------------------------------------
+Parsed Equations:
+  [Len 5] &! - ][ = `
+  [Len 5] ]! * !| = !|`
+  [Len 5] `{ + >] = >]`{
+Target Question: >> + |>
+
+
+=== Problem 25 | ID: 09d5ee68 ===
+Target Answer: !?'!
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+<:+|& = <:|&
+'&+>? = '&>?
+$!*!| = !!:&
+|:-?' = -&$
+Now, determine the result for: |:*>>
+----------------------------------------
+Parsed Equations:
+  [Len 5] <: + |& = <:|&
+  [Len 5] '& + >? = '&>?
+  [Len 5] $! * !| = !!:&
+  [Len 5] |: - ?' = -&$
+Target Question: |: * >>
+
+
+=== Problem 26 | ID: 0a2b9109 ===
+Target Answer: -?:
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+|:*%( = ^^
+#|-|# = -?$
+?%)|( = (^^
+|?*(| = ?:!
+Now, determine the result for: $[-^:
+----------------------------------------
+Parsed Equations:
+  [Len 5] |: * %( = ^^
+  [Len 5] #| - |# = -?$
+  [Len 5] ?% ) |( = (^^
+  [Len 5] |? * (| = ?:!
+Target Question: $[ - ^:
+
+
+=== Problem 27 | ID: 0a3ee7c7 ===
+Target Answer: \@)]
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+["+[@ = "})
+][*!% = \\\@
+]"-"% = @
+[}-[\ = -`@
+Now, determine the result for: }\*%]
+----------------------------------------
+Parsed Equations:
+  [Len 5] [" + [@ = "})
+  [Len 5] ][ * !% = \\\@
+  [Len 5] ]" - "% = @
+  [Len 5] [} - [\ = -`@
+Target Question: }\ * %]
+
+
+=== Problem 28 | ID: 0a94b2de ===
+Target Answer: @}`@
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+'')<] = $@
+@})$' = <?<
+@]#/$ = <?<'
+Now, determine the result for: ]}#@]
+----------------------------------------
+Parsed Equations:
+  [Len 5] '' ) <] = $@
+  [Len 5] @} ) $' = <?<
+  [Len 5] @] # /$ = <?<'
+Target Question: ]} # @]
+
+
+=== Problem 29 | ID: 0b0a3643 ===
+Target Answer: ""
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+#/-\@ = -@#
+""+#) = )/
+'#+/# = %"
+\)-)@ = -'"
+Now, determine the result for: '/-%)
+----------------------------------------
+Parsed Equations:
+  [Len 5] #/ - \@ = -@#
+  [Len 5] "" + #) = )/
+  [Len 5] '# + /# = %"
+  [Len 5] \) - )@ = -'"
+Target Question: '/ - %)
+
+
+=== Problem 30 | ID: 0babcba2 ===
+Target Answer: ?""
+----------------------------------------
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+<!-|? = ""
+<`%<| = ?)"
+!\-?" = "/
+`/%)` = `("
+Now, determine the result for: ((%\!
+----------------------------------------
+Parsed Equations:
+  [Len 5] <! - |? = ""
+  [Len 5] <` % <| = ?)"
+  [Len 5] !\ - ?" = "/
+  [Len 5] `/ % )` = `("
+Target Question: (( % \!
+
+
