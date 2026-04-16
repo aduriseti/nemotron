@@ -1,9 +1,13 @@
-.PHONY: all reasoning corpus train upload setup help
+.PHONY: all reasoning corpus train upload setup help serve
 
 ifneq (,$(wildcard ./.env))
     include .env
     export
 endif
+
+# Default dataset mode. Options: kaggle_only, full_pipeline, spelling_test
+DATASET_MODE ?= kaggle_only
+export ACTIVE_MODE = $(DATASET_MODE)
 
 # Default target: run the full pipeline
 all: reasoning corpus train upload notebook
@@ -33,6 +37,10 @@ notebook:
 validate:
 	uv run python3 push_validation.py
 
+# 7. Serve the project files locally
+serve:
+	./serve.sh
+
 # Helper: Set up Modal authentication
 setup:
 	uv run modal setup
@@ -45,6 +53,7 @@ help:
 	@echo "make corpus    - Tokenize and package traces into corpus.jsonl"
 	@echo "make train     - Execute LoRA SFT training on the Tinker backend"
 	@echo "make upload    - Push the trained adapter to Kaggle using Modal"
+	@echo "make serve     - Start local server to view metrics.html, corpus.html, etc."
 	@echo ""
 	@echo "make all       - Run the complete end-to-end pipeline"
 	@echo "make setup     - Authenticate the local Modal client"

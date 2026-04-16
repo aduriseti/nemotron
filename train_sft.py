@@ -33,8 +33,9 @@ from loss_config import (
 )
 from lr_schedule import LRSchedule, StepLinearDecayLRSchedule
 from train_common import TrainingExample, load_corpus_entries, DatasetMode
+import os
 
-ACTIVE_MODE = DatasetMode.KAGGLE_ONLY
+ACTIVE_MODE = DatasetMode(os.environ.get("ACTIVE_MODE", DatasetMode.KAGGLE_ONLY.value))
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,7 @@ class Cfg:
         default_factory=lambda: datetime.now().strftime("%m-%d-%H-%M")
     )
     model_name: str = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"
-    batch_size: int = 32
+    batch_size: int = 64
     num_epochs: int = 1
     lora_rank: int = 32 # 32
     max_length: int = 8192

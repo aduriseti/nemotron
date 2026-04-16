@@ -126,8 +126,10 @@ class CorpusEntry:
 
 
 from train_common import DatasetMode
+import os
 
-ACTIVE_MODE = DatasetMode.KAGGLE_ONLY
+ACTIVE_MODE = DatasetMode(os.environ.get("ACTIVE_MODE", DatasetMode.KAGGLE_ONLY.value))
+print("Using dataset mode: ", ACTIVE_MODE)
 
 def choose_entry_to_include(problem_status: str, category: str) -> bool:
     """Include if the problem's rule was found, or if category is a _guess type."""
