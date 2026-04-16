@@ -128,12 +128,12 @@ class CorpusEntry:
 from train_common import DatasetMode
 import os
 
-ACTIVE_MODE = DatasetMode(os.environ.get("ACTIVE_MODE", DatasetMode.KAGGLE_ONLY.value))
-print("Using dataset mode: ", ACTIVE_MODE)
+ACTIVE_DATASET_MODE = DatasetMode(os.environ.get("ACTIVE_DATASET_MODE", DatasetMode.KAGGLE_ONLY.value))
+print("Using dataset mode: ", ACTIVE_DATASET_MODE)
 
 def choose_entry_to_include(problem_status: str, category: str) -> bool:
     """Include if the problem's rule was found, or if category is a _guess type."""
-    if ACTIVE_MODE == DatasetMode.SPELLING_TEST:
+    if ACTIVE_DATASET_MODE == DatasetMode.SPELLING_TEST:
         return category == "spelling"
     
     if category.endswith("_guess"):
@@ -305,12 +305,12 @@ def main() -> None:
         entries.append(entry)
 
     # Process augmentations/*.txt (no reasoning, no \boxed{})
-    if AUGMENTATIONS_DIR.exists() and ACTIVE_MODE in (DatasetMode.FULL_PIPELINE, DatasetMode.SPELLING_TEST):
+    if AUGMENTATIONS_DIR.exists() and ACTIVE_DATASET_MODE in (DatasetMode.FULL_PIPELINE, DatasetMode.SPELLING_TEST):
         for aug_path in sorted(AUGMENTATIONS_DIR.glob("*.txt")):
             text = aug_path.read_text()
             # Parse [category], [prompt], and [completion] sections
             category = text.split("[category]\n", 1)[1].split("\n[prompt]\n", 1)[0]
-            if ACTIVE_MODE == DatasetMode.SPELLING_TEST and category != "spelling":
+            if ACTIVE_DATASET_MODE == DatasetMode.SPELLING_TEST and category != "spelling":
                 continue
             prompt_text = text.split("[prompt]\n", 1)[1].split("\n[completion]\n", 1)[0]
             completion = text.split("\n[completion]\n", 1)[1].rstrip("\n")
@@ -378,7 +378,7 @@ def main() -> None:
         return dup
 
     # Priority problems get one extra copy (only in FULL_PIPELINE)
-    if ACTIVE_MODE == DatasetMode.FULL_PIPELINE:
+    if ACTIVE_DATASET_MODE == DatasetMode.FULL_PIPELINE:
         priority_dups = [
             _duplicate_entry(e, "-p0") for e in entries if e.problem_id in priority_ids
         ]

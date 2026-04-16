@@ -4,5 +4,5 @@
     "model_slug": "nemotron-adapter",
     "framework": "Transformers",
     "instance_slug": "default",
-    "latest_version": 3
+    "latest_version": 5
 }

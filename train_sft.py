@@ -32,10 +32,14 @@ from loss_config import (
     LossConfig,
 )
 from lr_schedule import LRSchedule, StepLinearDecayLRSchedule
-from train_common import TrainingExample, load_corpus_entries, DatasetMode
+from train_common import TrainingExample, load_corpus_entries, DatasetMode, SamplerMode
 import os
+from dynamic_sampler import DynamicSampler
 
-ACTIVE_MODE = DatasetMode(os.environ.get("ACTIVE_MODE", DatasetMode.KAGGLE_ONLY.value))
+ACTIVE_DATASET_MODE = DatasetMode(os.environ.get("ACTIVE_DATASET_MODE", DatasetMode.KAGGLE_ONLY.value))
+print("Using dataset mode: ", ACTIVE_DATASET_MODE)
+ACTIVE_SAMPLER = SamplerMode(os.environ.get("ACTIVE_SAMPLER_MODE", SamplerMode.STATIC.value))
+print("Using sampler mode: ", ACTIVE_SAMPLER)
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +150,7 @@ def build_datum(
     prev_logprobs: list[float] | None,
     epoch: int,
     loss: LossConfig,
+    is_weight: float = 1.0,
 ) -> tinker.Datum:
     """Build a Tinker Datum for training."""
     assert len(tokens) == len(advantages)
@@ -165,7 +170,7 @@ def build_datum(
         ),
     }
 
-    float_advantages = [float(a) for a in advantages[1:]]
+    float_advantages = [float(a) * is_weight for a in advantages[1:]]
 
     if isinstance(loss, CrossEntropyLossConfig):
         if isinstance(loss, CrossEntropyWithWeightingLossConfig):
@@ -210,6 +215,8 @@ def compute_epoch_metrics(
     all_token_epoch_lps: list[float] = []
     for example in examples:
         key = example.problem_id
+        if key not in all_epoch_logprobs or key not in all_ref_logprobs:
+            continue
         epoch_logprobs = all_epoch_logprobs[key]
         ref_logprobs = all_ref_logprobs[key]
         _, full_mask = example.load_tokens()
@@ -260,7 +267,7 @@ def compute_epoch_metrics(
 
 
 def filter_training_examples(examples: list[TrainingExample]) -> list[TrainingExample]:
-    if ACTIVE_MODE == DatasetMode.SPELLING_TEST:
+    if ACTIVE_DATASET_MODE == DatasetMode.SPELLING_TEST:
         return [e for e in examples if e.category == "spelling"]
     return examples
 
@@ -331,6 +338,15 @@ async def main():
     # Logprobs from the latest epoch
     all_prev_logprobs: dict[str, list[float]] = {}
 
+    logger.info(f"Using sampler mode: {ACTIVE_SAMPLER.value}")
+
+    if ACTIVE_SAMPLER == SamplerMode.DYNAMIC:
+        dynamic_sampler = DynamicSampler(
+            examples=[{'id': e.problem_id, 'category': e.category} for e in examples],
+            batch_size=cfg.batch_size,
+            half_life_cat_batches=10.0,
+        )
+
     metrics_path = log_path / "metrics.jsonl"
     loss_path = log_path / "loss.jsonl"
     with (
@@ -346,14 +362,22 @@ async def main():
             )
             epoch_start = time.time()
 
-            rng = random.Random(epoch)
-            batches = _stratified_batches(examples, cfg.batch_size, rng)
-
-            print(f"Batch sizes: {Counter(len(batch) for batch in batches)}")
-
             epoch_dir = logprob_dir / str(epoch)
 
-            for batch_indices in batches:
+            if ACTIVE_SAMPLER == SamplerMode.STATIC:
+                rng = random.Random(epoch)
+                batches = _stratified_batches(examples, cfg.batch_size, rng)
+                batch_iterator = batches
+            else:
+                batch_iterator = range(n_batches)
+
+            for step_idx, batch_item in enumerate(batch_iterator):
+                if ACTIVE_SAMPLER == SamplerMode.STATIC:
+                    batch_indices = batch_item
+                    batch_weights = [1.0] * len(batch_indices)
+                else:
+                    batch_indices, batch_weights = dynamic_sampler.get_next_batch()
+
                 batch_examples = [examples[i] for i in batch_indices]
 
                 data: list[tinker.Datum] = []
@@ -361,7 +385,7 @@ async def main():
                 target_masks: list[list[int]] = []
                 batch_tokens: list[list[int]] = []
                 batch_masks: list[list[int]] = []
-                for example in batch_examples:
+                for i, example in enumerate(batch_examples):
                     tokens, advantages = example.load_tokens()
                     if len(tokens) > cfg.max_length:
                         tokens = tokens[: cfg.max_length]
@@ -371,8 +395,10 @@ async def main():
                         ref_logprobs = None
                         prev_logprobs = None
                     else:
-                        ref_logprobs = all_ref_logprobs[key][: len(tokens) - 1]
-                        prev_logprobs = all_prev_logprobs[key][: len(tokens) - 1]
+                        ref_logprobs = all_ref_logprobs.get(key)
+                        if ref_logprobs: ref_logprobs = ref_logprobs[: len(tokens) - 1]
+                        prev_logprobs = all_prev_logprobs.get(key)
+                        if prev_logprobs: prev_logprobs = prev_logprobs[: len(tokens) - 1]
                     datum = build_datum(
                         tokens,
                         advantages,
@@ -380,6 +406,7 @@ async def main():
                         prev_logprobs,
                         epoch,
                         cfg.loss_config,
+                        is_weight=batch_weights[i],
                     )
                     data.append(datum)
                     valid_examples.append(example)
@@ -417,6 +444,8 @@ async def main():
                     f"lr={lr:.2e} n={len(data)} "
                     f"loss={cfg.loss_config.name} t={elapsed:.1f}s"
                 )
+                if ACTIVE_SAMPLER == SamplerMode.DYNAMIC:
+                    logger.info(f"LR: {dynamic_sampler.get_short_stats()}")
 
                 # Log metrics
                 metrics_record: dict = {
@@ -434,17 +463,33 @@ async def main():
                     metrics_record.update(
                         {f"optim/{k}": v for k, v in optim_result.metrics.items()}
                     )
-                # Compute loss per token by category for this step
+                # Compute loss and min logprob metrics for this step
                 cat_loss: dict[str, float] = {}
                 cat_tokens: dict[str, int] = {}
+                cat_min_lp: dict[str, float] = {}
+                batch_loss_vals: list[float] = []
+                
                 for i, example in enumerate(valid_examples):
                     cat = example.category
                     lp_data = logprobs_list[i].data
-                    loss_val = sum(-v for v, m in zip(lp_data, target_masks[i]) if m)
+                    unmasked_lps = [v for v, m in zip(lp_data, target_masks[i]) if m]
+                    
+                    # Compute total loss and min logprob
+                    loss_val = sum(-v for v in unmasked_lps)
+                    cat_min = min(unmasked_lps) if unmasked_lps else 0.0
+                    
+                    # Accumulate category metrics
                     cat_loss[cat] = cat_loss.get(cat, 0.0) + loss_val
-                    cat_tokens[cat] = (
-                        cat_tokens.get(cat, 0) + example.unmasked_token_count
-                    )
+                    cat_tokens[cat] = cat_tokens.get(cat, 0) + example.unmasked_token_count
+                    if cat not in cat_min_lp or cat_min < cat_min_lp[cat]:
+                        cat_min_lp[cat] = cat_min
+                        
+                    # Use negative min_logprob as the signal for the dynamic sampler
+                    batch_loss_vals.append(-cat_min)
+                
+                if ACTIVE_SAMPLER == SamplerMode.DYNAMIC:
+                    dynamic_sampler.update(batch_indices, batch_loss_vals)
+                
                 for cat in sorted(cat_loss):
                     if cat_tokens[cat] > 0:
                         metrics_record[f"_loss_per_token/{cat}"] = (
@@ -455,16 +500,7 @@ async def main():
                     metrics_record["_loss_per_token"] = (
                         sum(cat_loss.values()) / total_tokens
                     )
-
-                # Compute min logprob by category for this step (unmasked tokens only)
-                cat_min_lp: dict[str, float] = {}
-                for i, example in enumerate(valid_examples):
-                    cat = example.category
-                    lp_data = logprobs_list[i].data
-                    unmasked_lps = [v for v, m in zip(lp_data, target_masks[i]) if m]
-                    cat_min = min(unmasked_lps) if unmasked_lps else 0.0
-                    if cat not in cat_min_lp or cat_min < cat_min_lp[cat]:
-                        cat_min_lp[cat] = cat_min
+                
                 for cat in sorted(cat_min_lp):
                     metrics_record[f"_min_logprob/{cat}"] = round(cat_min_lp[cat], 4)
 
@@ -515,6 +551,8 @@ async def main():
 
             epoch_elapsed = time.time() - epoch_start
             logger.info(f"Epoch {epoch} completed in {epoch_elapsed:.1f}s")
+            if ACTIVE_SAMPLER == SamplerMode.DYNAMIC:
+                logger.info(f"Dynamic Sampler Stats:\n{dynamic_sampler.get_stats()}")
 
             # Compute and save per-epoch loss metrics
             epoch_metrics = compute_epoch_metrics(

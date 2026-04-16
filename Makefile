@@ -7,7 +7,11 @@ endif
 
 # Default dataset mode. Options: kaggle_only, full_pipeline, spelling_test
 DATASET_MODE ?= kaggle_only
-export ACTIVE_MODE = $(DATASET_MODE)
+export ACTIVE_DATASET_MODE = $(DATASET_MODE)
+
+# Default sampling mode. Options: static, dynamic
+ACTIVE_SAMPLER_MODE ?= static
+export ACTIVE_SAMPLER_MODE = $(SAMPLER_MODE)
 
 # Default target: run the full pipeline
 all: reasoning corpus train upload notebook

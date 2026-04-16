@@ -19,6 +19,10 @@ class DatasetMode(Enum):
     FULL_PIPELINE = "full_pipeline"     # Kaggle + Augmentations + Duplicates
     SPELLING_TEST = "spelling_test"     # Only synthetic spelling data
 
+class SamplerMode(Enum):
+    STATIC = "static"                   # Classic stratified shuffling
+    DYNAMIC = "dynamic"                 # Dynamic curriculum sampling
+
 Category = Literal[
     "bit_manipulation",
     "cipher",
