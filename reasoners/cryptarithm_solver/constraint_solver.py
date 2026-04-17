@@ -262,17 +262,26 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
             continue
             
         if solutions:
+            seen_math_maps = set()
             for sol in solutions:
                 digit_map = {sym: sol[sym] for sym in digit_sym_list}
                 op_map = {sym: sol[f"{sym}_op"] for sym in op_sym_list}
+                
+                # Check for uniqueness of the active math mapping
+                active_digit_map = tuple(sorted((k, v) for k, v in digit_map.items() if k in active_digits))
+                active_op_map = tuple(sorted(op_map.items()))
+                math_sig = (active_digit_map, active_op_map)
+                
+                if math_sig in seen_math_maps: continue
+                seen_math_maps.add(math_sig)
                 
                 tA_vals = [digit_map[s] for s in tA]
                 tB_vals = [digit_map[s] for s in tB]
                 tgt_math_op = op_map[tgt_op_str]
                 
                 try:
-                    L, R, d1, d2, d3, d4 = PRE_OPS[p](tA_vals, tB_vals)
-                    numeric_ans = MID_OPS[tgt_math_op](L, R, d1, d2, d3, d4)
+                    L_tgt, R_tgt, _, _, _, _ = PRE_OPS[p](tA_vals, tB_vals)
+                    numeric_ans = MID_OPS[tgt_math_op](L_tgt, R_tgt, 0, 0, 0, 0)
                 except Exception:
                     continue
 
@@ -290,8 +299,7 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                 s_val = fmt_ans
                 
                 inv_digit_map = {v: k for k, v in digit_map.items() if v >= 0}
-                print(f"DEBUG SOLUTION: {p}->{f}, ops: {op_map}, ans: {s_val}, map: {inv_digit_map}")
-                    
+                
                 # Encode back to symbols
                 encoded_ans = ""
                 can_encode = True
@@ -319,12 +327,35 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                         
                 if can_encode:
                     # Restore symbol bleed if the FIRST example had it
-                    if parsed_examples[0]['prefix']: encoded_ans = tgt_op_str + encoded_ans
-                    if parsed_examples[0]['suffix']: encoded_ans = encoded_ans + tgt_op_str
+                    prediction = encoded_ans
+                    if parsed_examples[0]['prefix']: prediction = tgt_op_str + prediction
+                    if parsed_examples[0]['suffix']: prediction = prediction + tgt_op_str
                     
-                    if encoded_ans not in possible_answers:
-                        possible_answers[encoded_ans] = 0
-                    possible_answers[encoded_ans] += 1
+                    if prediction not in possible_answers:
+                        possible_answers[prediction] = 0
+                    possible_answers[prediction] += 1
+
+                    print(f"DEBUG SOLUTION: {p}->{f}, ops: {op_map}, map: {inv_digit_map}")
+                    # Show the decrypted examples!
+                    for ex_num, current_ex in enumerate(parsed_examples):
+                        A_vals = [digit_map[c] for c in current_ex['A']]
+                        B_vals = [digit_map[c] for c in current_ex['B']]
+                        out_vals = [digit_map[c] for c in current_ex['out']]
+                        
+                        L_ex, R_ex, _, _, _, _ = PRE_OPS[p](A_vals, B_vals)
+                        expected_ex = MID_OPS[op_map[current_ex['op']]](L_ex, R_ex, 0, 0, 0, 0)
+                        
+                        s_res = str(expected_ex)
+                        s_res_abs = s_res[1:] if s_res.startswith('-') else s_res
+                        fmt_ex = POST_OPS[f](s_res_abs)
+                        if f == 'rev' and s_res.startswith('-'): fmt_ex = '-' + fmt_ex
+                        elif f == 'swap' and s_res.startswith('-'): fmt_ex = '-' + fmt_ex
+                            
+                        decOut = "".join(str(d) for d in out_vals)
+                        math_op = op_map[current_ex['op']]
+                        print(f"  Eq {ex_num+1}: {L_ex} {math_op} {R_ex} -> Math: {expected_ex} -> Fmt: {fmt_ex} == {decOut}")
+
+                    print(f"  Target Math: {L_tgt} {tgt_math_op} {R_tgt} -> Math: {numeric_ans} -> Fmt: {s_val} -> Encoded: {prediction}", flush=True)
 
     if mode == 'greedy':
         if possible_answers: 
