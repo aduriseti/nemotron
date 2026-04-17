@@ -1,0 +1,47 @@
+
+=== PROBLEM 00457d26 ===
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+`!*[{ = '"[`
+\'*'> = ![@
+\'-!` = \\
+`!*\& = '@'{
+Now, determine the result for: [[-!'
+Expected Answer: @&
+
+DEBUG SOLUTION: ABCD->raw, ops: {'-': 'sub_abs', '*': 'mul1'}, ans: 18, map: {0: '>', 4: '[', 5: '`', 6: '!', 9: '{', 1: '@', 3: '\\', 8: '&', 2: "'", 7: '"'}
+DEBUG SOLUTION: ABCD->raw, ops: {'-': 'sub_abs', '*': 'mul1'}, ans: 18, map: {0: '>', 4: '[', 5: '`', 6: '!', 9: '{', 1: '@', 3: '\\', 8: '&', 2: "'", 7: '"'}
+
+[CORRECT] 00457d26: @&
+
+=== PROBLEM 00c032a8 ===
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+}`]?( = ())
+}#<)\ = #?
+?(!&& = #@@#
+(?!@` = )#))
+Now, determine the result for: ))!\)
+Expected Answer: \^?
+
+DEBUG SOLUTION: BADC->rev, ops: {'!': 'mul', '<': 'sub_abs', ']': 'add'}, ans: 902, map: {2: '?', 1: ')', 9: '\\', 7: '(', 6: '#', 4: '`', 3: '@', 5: '}', 8: '&'}
+DEBUG SOLUTION: BADC->swap, ops: {'!': 'mul', '<': 'sub_abs', ']': 'add'}, ans: 902, map: {2: '?', 1: ')', 9: '\\', 7: '(', 6: '#', 4: '`', 3: '@', 5: '}', 8: '&'}
+DEBUG SOLUTION: DCBA->rev, ops: {'!': 'mul', '<': 'sub_abs', ']': 'add'}, ans: 902, map: {2: '?', 1: ')', 9: '\\', 7: '(', 6: '#', 4: '`', 3: '@', 5: '}', 8: '&'}
+DEBUG SOLUTION: DCBA->swap, ops: {'!': 'mul', '<': 'sub_abs', ']': 'add'}, ans: 902, map: {2: '?', 1: ')', 9: '\\', 7: '(', 6: '#', 4: '`', 3: '@', 5: '}', 8: '&'}
+
+[INCORRECT] 00c032a8: Expected \^? | Pred: \"?
+
+=== PROBLEM 012cab1f ===
+In Alice's Wonderland, a secret set of transformation rules is applied to equations. Below are a few examples:
+`(]&: = %@#:
+&{>`% = {{
+("'%: = {@{
+:%>&: = :"
+`('"@ = %@{
+Now, determine the result for: {`'(&
+Expected Answer: |@{
+
+DEBUG SOLUTION: BADC->rev, ops: {']': 'mul', "'": 'add', '>': 'sub_abs'}, ans: 041, map: {9: '(', 3: '#', 7: '`', 1: '{', 4: '@', 8: ':', 5: '"', 6: '&', 2: '%'}
+DEBUG SOLUTION: BADC->swap, ops: {']': 'mul', "'": 'add', '>': 'sub_abs'}, ans: 041, map: {9: '(', 3: '#', 7: '`', 1: '{', 4: '@', 8: ':', 5: '"', 6: '&', 2: '%'}
+DEBUG SOLUTION: DCBA->rev, ops: {']': 'mul', "'": 'add', '>': 'sub'}, ans: 041, map: {9: '(', 3: '#', 7: '`', 1: '{', 4: '@', 8: ':', 5: '"', 6: '&', 2: '%'}
+DEBUG SOLUTION: DCBA->swap, ops: {']': 'mul', "'": 'add', '>': 'sub'}, ans: 041, map: {9: '(', 3: '#', 7: '`', 1: '{', 4: '@', 8: ':', 5: '"', 6: '&', 2: '%'}
+
+[INCORRECT] 012cab1f: Expected |@{ | Pred: !@{

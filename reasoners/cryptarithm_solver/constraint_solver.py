@@ -38,7 +38,6 @@ def make_num(digits):
 PRE_OPS = {
     'ABCD': lambda A_vals, B_vals: (make_num(A_vals), make_num(B_vals), A_vals[0], A_vals[1], B_vals[0], B_vals[1]),
     'BADC': lambda A_vals, B_vals: (make_num(A_vals[::-1]), make_num(B_vals[::-1]), A_vals[1], A_vals[0], B_vals[1], B_vals[0]),
-    'CDAB': lambda A_vals, B_vals: (make_num(B_vals), make_num(A_vals), B_vals[0], B_vals[1], A_vals[0], A_vals[1]),
     'DCBA': lambda A_vals, B_vals: (make_num(B_vals[::-1]), make_num(A_vals[::-1]), B_vals[1], B_vals[0], A_vals[1], A_vals[0])
 }
 
@@ -47,10 +46,24 @@ MID_OPS = {
     'add': lambda L, R, d1, d2, d3, d4: L + R,
     'sub': lambda L, R, d1, d2, d3, d4: L - R,
     'mul': lambda L, R, d1, d2, d3, d4: L * R,
-    # 'div': lambda L, R, d1, d2, d3, d4: L // R if R != 0 else None,
+    'cat': lambda L, R, d1, d2, d3, d4: int(str(L) + str(R)),
+    'max_mod_min': lambda L, R, d1, d2, d3, d4: max(L, R) % min(L, R) if min(L, R) != 0 else max(L, R),
+    'add1': lambda L, R, d1, d2, d3, d4: L + R + 1,
+    'addm1': lambda L, R, d1, d2, d3, d4: L + R - 1,
+    'mul1': lambda L, R, d1, d2, d3, d4: L * R + 1,
+    'mulm1': lambda L, R, d1, d2, d3, d4: L * R - 1,
+    'sub_abs': lambda L, R, d1, d2, d3, d4: abs(L - R),
+    'sub_neg_abs': lambda L, R, d1, d2, d3, d4: -abs(L - R)
 }
 
-# Post-Ops: Check if the mathematical result matches the expected output digits
+# Post-Ops: Format the numeric result
+POST_OPS = {
+    'raw': lambda s_exp_abs: s_exp_abs,
+    'rev': lambda s_exp_abs: s_exp_abs[::-1],
+    'swap': lambda s_exp_abs: s_exp_abs[::-1]
+}
+
+# Check if the mathematical result matches the expected output digits
 def check_post(expected_val, out_vals, f_type, is_negative):
     if expected_val is None: return False
     s_exp = str(expected_val)
@@ -60,28 +73,17 @@ def check_post(expected_val, out_vals, f_type, is_negative):
     s_exp_abs = s_exp[1:] if is_negative else s_exp
     s_out = "".join(str(d) for d in out_vals)
     
-    if f_type == 'raw':
-        return s_exp_abs == s_out
-    elif f_type == 'rev':
-        actual_str = "-" + s_out if is_negative else s_out
-        return s_exp[::-1] == actual_str
-    elif f_type == 'swap':
-        return s_exp_abs[::-1] == s_out
-    elif f_type == 'zpad2':
-        actual_val = f"{expected_val:02d}"
-        if is_negative and not actual_val.startswith('-'): return False
-        if not is_negative and actual_val.startswith('-'): return False
-        return actual_val.replace('-', '') == s_out
+    actual_str = POST_OPS[f_type](s_exp_abs)
+    if f_type == 'rev' and is_negative:
+        actual_str = "-" + actual_str
         
-    return False
+    return actual_str == s_out
 
-# The 6 global formatting combinations from the EDA + zpad combinations
-PIPELINES = [
-    ('BADC', 'swap'), ('DCBA', 'swap'),
-    ('BADC', 'rev'), ('DCBA', 'rev'),
-    ('ABCD', 'raw'), ('CDAB', 'raw'),
-    ('ABCD', 'zpad2'), ('DCBA', 'zpad2')
-]
+# The global formatting combinations
+PIPELINES = []
+for p in PRE_OPS.keys():
+    for f in POST_OPS.keys():
+        PIPELINES.append((p, f))
 
 # Sort formatting pipelines by empirical frequency
 try:
@@ -188,12 +190,11 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
         
     digit_sym_list = list(active_digits) + list(active_ops_only)
     op_sym_list = list(active_ops)
-    possible_answers = []
+    possible_answers = {}
 
     # Loop over the 6 global formatting pipelines
     for p, f in PIPELINES:
-        problem = Problem()
-        
+        problem = Problem()        
         # --- ADD VARIABLES ---
         # 1. Definite Digits get 0-9
         problem.addVariables(list(active_digits), range(10))
@@ -257,6 +258,7 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                 except StopIteration:
                     break
         except TimeoutException:
+            print(f"DEBUG: Timeout for {p}->{f}")
             continue
             
         if solutions:
@@ -278,12 +280,15 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                 
                 # Format numeric answer
                 s_val = str(numeric_ans)
-                if f == 'rev': s_val = s_val[::-1]
-                elif f == 'swap':
-                    s_val = '-' + s_val[1:][::-1] if s_val.startswith('-') else s_val[::-1]
-                elif f == 'zpad2':
-                    s_val = f"{numeric_ans:02d}"
-                    
+                s_val_abs = s_val[1:] if s_val.startswith('-') else s_val
+                
+                fmt_ans = POST_OPS[f](s_val_abs)
+                if f == 'rev' and s_val.startswith('-'):
+                    fmt_ans = '-' + fmt_ans
+                elif f == 'swap' and s_val.startswith('-'):
+                    fmt_ans = '-' + fmt_ans
+                s_val = fmt_ans
+                
                 inv_digit_map = {v: k for k, v in digit_map.items() if v >= 0}
                 print(f"DEBUG SOLUTION: {p}->{f}, ops: {op_map}, ans: {s_val}, map: {inv_digit_map}")
                     
@@ -318,10 +323,12 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                     if parsed_examples[0]['suffix']: encoded_ans = encoded_ans + tgt_op_str
                     
                     if encoded_ans not in possible_answers:
-                        possible_answers.append(encoded_ans)
+                        possible_answers[encoded_ans] = 0
+                    possible_answers[encoded_ans] += 1
 
     if mode == 'greedy':
-        if possible_answers: return possible_answers[0]
+        if possible_answers: 
+            return max(possible_answers, key=possible_answers.get)
         return None
 
     if mode == 'theoretical':
