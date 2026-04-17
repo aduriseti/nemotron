@@ -21,6 +21,12 @@ if WORKSPACE_DIR not in sys.path: sys.path.append(WORKSPACE_DIR)
 from reasoners.store_types import Problem as NemotronProblem
 
 # =============================================================================
+# GLOBAL SYMBOL UNIVERSE
+# =============================================================================
+SYMBOL_UNIVERSE = ['!', '"', '#', '$', '%', '&', "'", '(', ')', '*', '+', ',', '-', '.', '/', ':', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~']
+
+
+# =============================================================================
 # GRAMMAR AND ALGEBRAIC GENERATORS
 # =============================================================================
 
@@ -28,28 +34,20 @@ def make_num(digits):
     """Calculates the integer value of a list of integer digits (e.g. [1, 2] -> 12)"""
     return sum(d * (10**(len(digits)-1-i)) for i, d in enumerate(digits))
 
-# Pre-Ops: Return a tuple of lambdas that evaluate the Left and Right operands
+# Pre-Ops: Return L, R, d1, d2, d3, d4
 PRE_OPS = {
-    'ABCD': lambda A_vals, B_vals: (make_num(A_vals), make_num(B_vals)),
-    'BADC': lambda A_vals, B_vals: (make_num(A_vals[::-1]), make_num(B_vals[::-1])),
-    'CDAB': lambda A_vals, B_vals: (make_num(B_vals), make_num(A_vals)),
-    'DCBA': lambda A_vals, B_vals: (make_num(B_vals[::-1]), make_num(A_vals[::-1]))
+    'ABCD': lambda A_vals, B_vals: (make_num(A_vals), make_num(B_vals), A_vals[0], A_vals[1], B_vals[0], B_vals[1]),
+    'BADC': lambda A_vals, B_vals: (make_num(A_vals[::-1]), make_num(B_vals[::-1]), A_vals[1], A_vals[0], B_vals[1], B_vals[0]),
+    'CDAB': lambda A_vals, B_vals: (make_num(B_vals), make_num(A_vals), B_vals[0], B_vals[1], A_vals[0], A_vals[1]),
+    'DCBA': lambda A_vals, B_vals: (make_num(B_vals[::-1]), make_num(A_vals[::-1]), B_vals[1], B_vals[0], A_vals[1], A_vals[0])
 }
 
 # Mid-Ops: Standard mathematical operations
 MID_OPS = {
-    'add': lambda L, R: L + R,
-    'sub': lambda L, R: L - R,
-    'mul': lambda L, R: L * R,
-    'add1': lambda L, R: L + R + 1,
-    'addm1': lambda L, R: L + R - 1,
-    'mul1': lambda L, R: L * R + 1,
-    'mulm1': lambda L, R: L * R - 1,
-    'sub_abs': lambda L, R: abs(L - R),
-    'sub_rev': lambda L, R: R - L,
-    'sub_neg_abs': lambda L, R: -abs(L - R),
-    'cat': lambda L, R: int(str(L) + str(R)),
-    'mod': lambda L, R: max(L, R) % min(L, R) if min(L, R) != 0 else max(L, R)
+    'add': lambda L, R, d1, d2, d3, d4: L + R,
+    'sub': lambda L, R, d1, d2, d3, d4: L - R,
+    'mul': lambda L, R, d1, d2, d3, d4: L * R,
+    # 'div': lambda L, R, d1, d2, d3, d4: L // R if R != 0 else None,
 }
 
 # Post-Ops: Check if the mathematical result matches the expected output digits
@@ -69,14 +67,20 @@ def check_post(expected_val, out_vals, f_type, is_negative):
         return s_exp[::-1] == actual_str
     elif f_type == 'swap':
         return s_exp_abs[::-1] == s_out
+    elif f_type == 'zpad2':
+        actual_val = f"{expected_val:02d}"
+        if is_negative and not actual_val.startswith('-'): return False
+        if not is_negative and actual_val.startswith('-'): return False
+        return actual_val.replace('-', '') == s_out
         
     return False
 
-# The 6 global formatting combinations from the EDA
+# The 6 global formatting combinations from the EDA + zpad combinations
 PIPELINES = [
     ('BADC', 'swap'), ('DCBA', 'swap'),
     ('BADC', 'rev'), ('DCBA', 'rev'),
-    ('ABCD', 'raw'), ('CDAB', 'raw')
+    ('ABCD', 'raw'), ('CDAB', 'raw'),
+    ('ABCD', 'zpad2'), ('DCBA', 'zpad2')
 ]
 
 # Sort formatting pipelines by empirical frequency
@@ -93,6 +97,7 @@ try:
 except Exception:
     pass
 
+
 # =============================================================================
 # PROBLEM PARSING
 # =============================================================================
@@ -101,7 +106,13 @@ def extract_all_examples(prompt: str):
     lines = [l.strip() for l in prompt.split('\n') if '=' in l and 'determine' not in l.lower()]
     
     parsed_examples = []
-    unique_syms = set()
+    active_digits = set()
+    active_ops = set()
+    
+    prompt_syms = set()
+    for char in prompt:
+        if not char.isspace() and not char.isalnum() and char not in ['=', ',']:
+            prompt_syms.add(char)
     
     for line in lines:
         m = re.search(r'^(\S{2})(\S)(\S{2})\s*=\s*(\S+)$', line)
@@ -133,21 +144,20 @@ def extract_all_examples(prompt: str):
             'suffix': suffix_bleed
         })
         
-        unique_syms.update(list(left_syms_A) + list(left_syms_B) + out_syms + [op_sym])
+        active_digits.update(list(left_syms_A) + list(left_syms_B) + out_syms)
+        active_ops.add(op_sym)
         
     target_m = re.search(r'result for:\s*(\S{2})(\S)(\S{2})', prompt)
-    if not target_m: 
-        print("DEBUG: Target mismatch")
-        return None, [], set(), set(), ("", "", "")
-
+    if not target_m: return None, [], set(), set(), set(), ("", "", "")
+    
     tA_str, tgt_op, tB_str = target_m.groups()
     tA = list(tA_str)
     tB = list(tB_str)
-
-    unique_syms.update(tA + tB + [tgt_op])
-
-    print(f"DEBUG: Parsed {len(parsed_examples)} examples. Tgt: {tA_str} {tgt_op} {tB_str}")
-    return tgt_op, parsed_examples, unique_syms, (tA_str, tgt_op, tB_str)
+    
+    active_digits.update(tA + tB)
+    active_ops.add(tgt_op)
+    
+    return tgt_op, parsed_examples, active_digits, active_ops, prompt_syms, (tA_str, tgt_op, tB_str)
 
 
 # =============================================================================
@@ -156,82 +166,62 @@ def extract_all_examples(prompt: str):
 
 def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'greedy') -> Any:
     extract_result = extract_all_examples(prompt)
-    if len(extract_result) == 4:
-        tgt_op, parsed_examples, unique_syms, (tA, tgt_op_str, tB) = extract_result
-    else:
-        # In case the old signature was somehow preserved
-        tgt_op, parsed_examples, digit_syms, op_syms, (tA, tgt_op_str, tB) = extract_result
-        unique_syms = set(list(digit_syms) + list(op_syms))
-        
-    if not tgt_op or not parsed_examples: return None
+    if not extract_result[0]: return None
+    tgt_op, parsed_examples, active_digits, active_ops, prompt_syms, (tA, tgt_op_str, tB) = extract_result
     
-    # Identify which symbols act as operators in the 3rd position
-    op_symbols = set(ex['op'] for ex in parsed_examples)
-    op_symbols.add(tgt_op_str)
-    
-    # We must map ALL unique symbols to digits (0-9) to solve the puzzle fully.
-    # Wait, can a symbol be an operator AND a digit? Yes.
-    # But if a symbol is ONLY ever used as an operator, it doesn't strictly need a digit mapping.
-    # However, to be safe and enforce the 1-to-1 cipher, we assume ALL symbols (up to 10) are digits.
-    # And separately, the operator symbols map to math functions.
-    
-    # NEW LOGIC: Only count symbols that are used as digits (A, B, out) towards the 10-limit!
-    digit_only_syms = set()
-    for ex in parsed_examples:
-        digit_only_syms.update(ex['A'] + ex['B'] + ex['out'])
-    digit_only_syms.update(tA + tB)
-    
-    if len(digit_only_syms) > 10:
-        # If there are >10 DIGIT symbols, it breaks our base-10 bijective mapping.
-        return False if mode == 'theoretical' else None
+    if not parsed_examples: return None
 
-    # 2. IMMEDIATE REJECTION: Length Compatibility
+    # Length Compatibility Check
     for ex in parsed_examples:
         if len(ex['A']) != 2 or len(ex['B']) != 2:
             return False if mode == 'theoretical' else None
     if len(tA) != 2 or len(tB) != 2:
         return False if mode == 'theoretical' else None
 
-    digit_sym_list = list(digit_only_syms)
-    op_sym_list = list(op_symbols)
+    # ==========================================
+    # BUILD THE DIGIT AND OPERATOR DOMAINS
+    # ==========================================
+    active_ops_only = active_ops - active_digits
     
-    print(f"DEBUG: Digits({len(digit_sym_list)}): {digit_sym_list} | Ops: {op_sym_list}")
-    
-    possible_answers = set()
-    
+    if len(active_digits) > 10:
+        return False if mode == 'theoretical' else None
+        
+    digit_sym_list = list(active_digits) + list(active_ops_only)
+    op_sym_list = list(active_ops)
+    possible_answers = []
+
     # Loop over the 6 global formatting pipelines
     for p, f in PIPELINES:
         problem = Problem()
         
         # --- ADD VARIABLES ---
-        # 1. Digits get 0-9
-        problem.addVariables(digit_sym_list, range(10))
+        # 1. Definite Digits get 0-9
+        problem.addVariables(list(active_digits), range(10))
+        
+        # 2. Ops-Only get NEGATIVES ONLY so they don't steal 0-9 from actual missing digit symbols
+        if active_ops_only:
+            negatives = list(range(-1, -len(active_ops_only) - 1, -1))
+            problem.addVariables(list(active_ops_only), negatives)
+            
         problem.addConstraint(AllDifferentConstraint(), digit_sym_list)
         
-        # 2. Operators get the string names of the 12 math functions
-        # We append '_op' to the variable name so it doesn't collide with the digit variable
-        # if a symbol acts as both!
+        # 3. Operators get the string names of the 12 math functions
         op_vars = [f"{sym}_op" for sym in op_sym_list]
         problem.addVariables(op_vars, list(MID_OPS.keys()))
+        problem.addConstraint(AllDifferentConstraint(), op_vars)
         
         # --- BASE CONSTRAINTS ---
-        # Leading digits cannot be 0
-        for ex in parsed_examples:
-            if len(ex['A']) > 1: problem.addConstraint(lambda x: x != 0, [ex['A'][0]])
-            if len(ex['B']) > 1: problem.addConstraint(lambda x: x != 0, [ex['B'][0]])
-            if len(ex['out']) > 1: problem.addConstraint(lambda x: x != 0, [ex['out'][0]])
-        if len(tA) > 1: problem.addConstraint(lambda x: x != 0, [tA[0]])
-        if len(tB) > 1: problem.addConstraint(lambda x: x != 0, [tB[0]])
+        # Leading digits CAN be 0 in cryptarithms apparently! 
+        # (This is why 017a871e failed, it required a leading zero)
+        # We will not enforce non-zero leading digits.
 
         # --- DYNAMIC MATH CONSTRAINTS PER EXAMPLE ---
         for ex in parsed_examples:
-            # The variables involved in this specific equation
             ex_digit_syms = list(set(ex['A'] + ex['B'] + ex['out']))
             ex_op_var = f"{ex['op']}_op"
             
             def make_ex_constraint(current_ex, current_digit_syms, p_type, f_type):
                 def ex_check(*args):
-                    # args will contain: [digit_val_1, digit_val_2, ..., op_name]
                     digit_vals = args[:-1]
                     op_name = args[-1]
                     
@@ -242,40 +232,35 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                     out_vals = [mapping[s] for s in current_ex['out']]
                     
                     try:
-                        L, R = PRE_OPS[p_type](A_vals, B_vals)
-                        expected_val = MID_OPS[op_name](L, R)
+                        L, R, d1, d2, d3, d4 = PRE_OPS[p_type](A_vals, B_vals)
+                        expected_val = MID_OPS[op_name](L, R, d1, d2, d3, d4)
                         return check_post(expected_val, out_vals, f_type, current_ex['is_neg'])
-                    except Exception as e:
-                        # Silently fail on math exceptions like ZeroDivisionError
+                    except Exception:
                         return False
                 return ex_check
                 
-            # Attach constraint: variables = [digit symbols] + [the operator symbol]
             problem.addConstraint(
                 make_ex_constraint(ex, ex_digit_syms, p, f), 
                 ex_digit_syms + [ex_op_var]
             )
             
         # --- SOLVE CSP ---
-        # 2-second timeout per global formatting pipeline
         try:
-            print(f"DEBUG: Solving CSP for pipeline {p}->{f}")
-            signal.alarm(10)
-            solution = problem.getSolution()
-            signal.alarm(0)
-            if solution:
-                solutions = [solution]
-                print(f"DEBUG: 1 Solution found for {p}->{f}")
-            else:
-                solutions = []
-                print(f"DEBUG: 0 Solutions found for {p}->{f}")
+            import time
+            start_time = time.time()
+            iterator = problem.getSolutionIter()
+            solutions = []
+            while time.time() - start_time < 2.0:
+                try:
+                    sol = next(iterator)
+                    solutions.append(sol)
+                except StopIteration:
+                    break
         except TimeoutException:
-            print(f"DEBUG: Timeout for {p}->{f}")
             continue
             
         if solutions:
             for sol in solutions:
-                # Separate digit mapping from operator mapping
                 digit_map = {sym: sol[sym] for sym in digit_sym_list}
                 op_map = {sym: sol[f"{sym}_op"] for sym in op_sym_list}
                 
@@ -284,8 +269,8 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                 tgt_math_op = op_map[tgt_op_str]
                 
                 try:
-                    L, R = PRE_OPS[p](tA_vals, tB_vals)
-                    numeric_ans = MID_OPS[tgt_math_op](L, R)
+                    L, R, d1, d2, d3, d4 = PRE_OPS[p](tA_vals, tB_vals)
+                    numeric_ans = MID_OPS[tgt_math_op](L, R, d1, d2, d3, d4)
                 except Exception:
                     continue
 
@@ -296,21 +281,35 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                 if f == 'rev': s_val = s_val[::-1]
                 elif f == 'swap':
                     s_val = '-' + s_val[1:][::-1] if s_val.startswith('-') else s_val[::-1]
+                elif f == 'zpad2':
+                    s_val = f"{numeric_ans:02d}"
+                    
+                inv_digit_map = {v: k for k, v in digit_map.items() if v >= 0}
+                print(f"DEBUG SOLUTION: {p}->{f}, ops: {op_map}, ans: {s_val}, map: {inv_digit_map}")
                     
                 # Encode back to symbols
-                inv_digit_map = {v: k for k, v in digit_map.items()}
                 encoded_ans = ""
                 can_encode = True
+                
+                used_missing_syms = set()
                 
                 for char in s_val:
                     if char == '-': encoded_ans += '-'
                     else:
                         digit_int = int(char)
                         if digit_int not in inv_digit_map:
-                            # Safety check: if answer requires a digit we didn't map, we can't solve it.
-                            print(f"DEBUG: Found solution but missing digit {digit_int} in mapping")
-                            can_encode = False
-                            break
+                            found_sym = None
+                            for fallback_sym in SYMBOL_UNIVERSE:
+                                if fallback_sym not in digit_sym_list and fallback_sym not in prompt_syms and fallback_sym not in used_missing_syms:
+                                    found_sym = fallback_sym
+                                    break
+                            if not found_sym:
+                                can_encode = False
+                                break
+                            
+                            inv_digit_map[digit_int] = found_sym
+                            used_missing_syms.add(found_sym)
+                            
                         encoded_ans += inv_digit_map[digit_int]
                         
                 if can_encode:
@@ -318,13 +317,17 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                     if parsed_examples[0]['prefix']: encoded_ans = tgt_op_str + encoded_ans
                     if parsed_examples[0]['suffix']: encoded_ans = encoded_ans + tgt_op_str
                     
-                    if mode == 'greedy': return encoded_ans
-                    possible_answers.add(encoded_ans)
+                    if encoded_ans not in possible_answers:
+                        possible_answers.append(encoded_ans)
+
+    if mode == 'greedy':
+        if possible_answers: return possible_answers[0]
+        return None
 
     if mode == 'theoretical':
         return str(target_answer) in possible_answers
         
-    return None
+    return possible_answers
 
 if __name__ == "__main__":
     print("Loading cryptarithm problems...")
@@ -342,7 +345,7 @@ if __name__ == "__main__":
 
     correct = 0
     total = 0
-    # Testing specific problems
+    # Testing subset to observe the accuracy improvement
     for _, row in tqdm.tqdm(df_crypt.head(10).iterrows(), total=min(10, len(df_crypt))):
         total += 1
         prompt = row['prompt']
