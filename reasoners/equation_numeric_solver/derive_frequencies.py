@@ -9,49 +9,47 @@ WORKSPACE_DIR = '/workspaces/nemotron'
 if WORKSPACE_DIR not in sys.path: sys.path.append(WORKSPACE_DIR)
 
 from reasoners.store_types import Problem
-from grammar_solver import extract_examples, get_base_rules, get_contextualizers, build_pipelines, RawOperands, ContextualAnswer
+from reasoners.equation_numeric_solver.grammar_solver import extract_examples, get_base_math_ops, get_base_formatters, build_pipelines, RawOperands, FormattedAnswer
 
 def get_successful_pipelines(prompt, target_answer):
     tgt_op, op_examples, (tA, tB) = extract_examples(prompt)
     if not tgt_op: return []
     
-    rule_pool = get_base_rules()
+    pipelines = build_pipelines(get_base_math_ops(), get_base_formatters())
     
-    if op_examples:
-        ex_res_0 = op_examples[0][2]
-        prefix = tgt_op if ex_res_0.startswith(tgt_op) else ""
-        suffix = tgt_op if ex_res_0.endswith(tgt_op) else ""
-        rule_pool.extend(get_contextualizers(tgt_op))
+    successful = []
+    
+    for pipeline in pipelines:
+        math_symbol = pipeline.symbol
         
-        cleaned_examples = [(exA, exB, ex_res.replace(tgt_op, '')) for exA, exB, ex_res in op_examples]
-        pipelines = build_pipelines(rule_pool, start_type=RawOperands, end_type=ContextualAnswer)
-        
-        successful = []
-        for pipeline in pipelines:
+        def encrypt(formatted_val_str, t_op, m_sym):
+            if m_sym and m_sym != "":
+                if m_sym == '-':
+                    return formatted_val_str.replace('-', t_op)
+                else:
+                    return formatted_val_str.replace(m_sym, t_op)
+            return formatted_val_str
+
+        if op_examples:
             match_all = True
-            for exA, exB, _ in cleaned_examples:
-                expected_out = prefix + cleaned_examples[cleaned_examples.index((exA, exB, _))][2] + suffix
+            for exA, exB, ex_res in op_examples:
                 res = pipeline(RawOperands(exA, exB))
-                if res is None or res.value != expected_out:
+                if res is None:
                     match_all = False
                     break
-                    
-            if match_all:
-                ans_obj = pipeline(RawOperands(tA, tB))
-                if ans_obj is not None and ans_obj.value == target_answer:
-                    successful.append(pipeline.name)
-        return successful
-    else:
-        # Guess category (no examples)
-        rule_pool.extend(get_contextualizers(tgt_op))
-        pipelines = build_pipelines(rule_pool, start_type=RawOperands, end_type=ContextualAnswer)
-        
-        successful = []
-        for pipeline in pipelines:
-            ans_obj = pipeline(RawOperands(tA, tB))
-            if ans_obj is not None and ans_obj.value == target_answer:
+                encrypted_output = encrypt(str(res.value), tgt_op, math_symbol)
+                if encrypted_output != ex_res:
+                    match_all = False
+                    break
+            if not match_all: continue
+                
+        ans_obj = pipeline(RawOperands(tA, tB))
+        if ans_obj is not None:
+            encrypted_ans = encrypt(str(ans_obj.value), tgt_op, math_symbol)
+            if encrypted_ans == target_answer:
                 successful.append(pipeline.name)
-        return successful
+            
+    return successful
 
 if __name__ == "__main__":
     print("Loading problems...")
@@ -66,15 +64,14 @@ if __name__ == "__main__":
         p_text, a = row['prompt'], str(row['answer'])
         succ = get_successful_pipelines(p_text, a)
         
-        # If multiple pipelines perfectly match the examples AND the golden answer, 
-        # we add a fractional count to avoid over-weighting highly degenerate/ambiguous puzzles
         weight = 1.0 / len(succ) if succ else 0
         for s in succ:
             pipeline_counts[s] += weight
             
-    # Save the frequencies
-    freq_dict = {k: float(v) for k, v in pipeline_counts.most_common()}
-    with open('/workspaces/nemotron/reasoners/equation_numeric_grammar/pipeline_frequencies.json', 'w') as f:
+    # Save the frequencies as proportions/ratios
+    total_weight = sum(pipeline_counts.values())
+    freq_dict = {k: float(v) / total_weight for k, v in pipeline_counts.most_common()} if total_weight > 0 else {}
+    with open('/workspaces/nemotron/reasoners/equation_numeric_solver/pipeline_frequencies.json', 'w') as f:
         json.dump(freq_dict, f, indent=2)
         
     print("\nTop 20 most frequent pipelines:")
