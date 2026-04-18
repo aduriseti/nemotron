@@ -34,11 +34,20 @@ def make_num(digits):
     """Calculates the integer value of a list of integer digits (e.g. [1, 2] -> 12)"""
     return sum(d * (10**(len(digits)-1-i)) for i, d in enumerate(digits))
 
-# Pre-Ops: Return L, R, d1, d2, d3, d4
-PRE_OPS = {
-    'ABCD': lambda A_vals, B_vals: (make_num(A_vals), make_num(B_vals), A_vals[0], A_vals[1], B_vals[0], B_vals[1]),
-    'BADC': lambda A_vals, B_vals: (make_num(A_vals[::-1]), make_num(B_vals[::-1]), A_vals[1], A_vals[0], B_vals[1], B_vals[0]),
-    'DCBA': lambda A_vals, B_vals: (make_num(B_vals[::-1]), make_num(A_vals[::-1]), B_vals[1], B_vals[0], A_vals[1], A_vals[0])
+# Formatters: These define both the Pre-processing (permutation) and Post-processing (string formatting)
+FORMATTERS = {
+    'raw': {
+        'pre': lambda A_vals, B_vals: (make_num(A_vals), make_num(B_vals), A_vals[0], A_vals[1], B_vals[0], B_vals[1]),
+        'post': lambda val: str(val)
+    },
+    'swap': {
+        'pre': lambda A_vals, B_vals: (make_num(A_vals[::-1]), make_num(B_vals[::-1]), A_vals[1], A_vals[0], B_vals[1], B_vals[0]),
+        'post': lambda val: ('-' + str(val)[1:][::-1] if str(val).startswith('-') else str(val)[::-1])
+    },
+    'rev': {
+        'pre': lambda A_vals, B_vals: (make_num(B_vals[::-1]), make_num(A_vals[::-1]), B_vals[1], B_vals[0], A_vals[1], A_vals[0]),
+        'post': lambda val: str(val)[::-1]
+    }
 }
 
 # Mid-Ops: Standard mathematical operations
@@ -56,34 +65,23 @@ MID_OPS = {
     'sub_neg_abs': lambda L, R, d1, d2, d3, d4: -abs(L - R)
 }
 
-# Post-Ops: Format the numeric result
-POST_OPS = {
-    'raw': lambda s_exp_abs: s_exp_abs,
-    'rev': lambda s_exp_abs: s_exp_abs[::-1],
-    'swap': lambda s_exp_abs: s_exp_abs[::-1]
-}
-
 # Check if the mathematical result matches the expected output digits
-def check_post(expected_val, out_vals, f_type, is_negative):
+def check_post(expected_val, out_vals, fmt_name, is_negative):
     if expected_val is None: return False
-    s_exp = str(expected_val)
-    if is_negative and not s_exp.startswith('-'): return False
-    if not is_negative and s_exp.startswith('-'): return False
-    
-    s_exp_abs = s_exp[1:] if is_negative else s_exp
+
+    # Reconstruct the string that was in the prompt
     s_out = "".join(str(d) for d in out_vals)
-    
-    actual_str = POST_OPS[f_type](s_exp_abs)
-    if f_type == 'rev' and is_negative:
-        actual_str = "-" + actual_str
-        
+    if is_negative:
+        s_out = "-" + s_out
+
+    actual_str = FORMATTERS[fmt_name]['post'](expected_val)
+
     return actual_str == s_out
 
 # The global formatting combinations
 PIPELINES = []
-for p in PRE_OPS.keys():
-    for f in POST_OPS.keys():
-        PIPELINES.append((p, f))
+for fmt in FORMATTERS.keys():
+    PIPELINES.append((fmt, fmt))
 
 # Sort formatting pipelines by empirical frequency
 try:
@@ -221,7 +219,7 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
             ex_digit_syms = list(set(ex['A'] + ex['B'] + ex['out']))
             ex_op_var = f"{ex['op']}_op"
             
-            def make_ex_constraint(current_ex, current_digit_syms, p_type, f_type):
+            def make_ex_constraint(current_ex, current_digit_syms, f_type):
                 def ex_check(*args):
                     digit_vals = args[:-1]
                     op_name = args[-1]
@@ -233,7 +231,7 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                     out_vals = [mapping[s] for s in current_ex['out']]
                     
                     try:
-                        L, R, d1, d2, d3, d4 = PRE_OPS[p_type](A_vals, B_vals)
+                        L, R, d1, d2, d3, d4 = FORMATTERS[f_type]['pre'](A_vals, B_vals)
                         expected_val = MID_OPS[op_name](L, R, d1, d2, d3, d4)
                         return check_post(expected_val, out_vals, f_type, current_ex['is_neg'])
                     except Exception:
@@ -241,7 +239,7 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                 return ex_check
                 
             problem.addConstraint(
-                make_ex_constraint(ex, ex_digit_syms, p, f), 
+                make_ex_constraint(ex, ex_digit_syms, f), 
                 ex_digit_syms + [ex_op_var]
             )
             
@@ -280,7 +278,7 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                 tgt_math_op = op_map[tgt_op_str]
                 
                 try:
-                    L_tgt, R_tgt, _, _, _, _ = PRE_OPS[p](tA_vals, tB_vals)
+                    L_tgt, R_tgt, _, _, _, _ = FORMATTERS[f]['pre'](tA_vals, tB_vals)
                     numeric_ans = MID_OPS[tgt_math_op](L_tgt, R_tgt, 0, 0, 0, 0)
                 except Exception:
                     continue
@@ -288,15 +286,7 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                 if numeric_ans is None: continue
                 
                 # Format numeric answer
-                s_val = str(numeric_ans)
-                s_val_abs = s_val[1:] if s_val.startswith('-') else s_val
-                
-                fmt_ans = POST_OPS[f](s_val_abs)
-                if f == 'rev' and s_val.startswith('-'):
-                    fmt_ans = '-' + fmt_ans
-                elif f == 'swap' and s_val.startswith('-'):
-                    fmt_ans = '-' + fmt_ans
-                s_val = fmt_ans
+                s_val = FORMATTERS[f]['post'](numeric_ans)
                 
                 inv_digit_map = {v: k for k, v in digit_map.items() if v >= 0}
                 
@@ -342,15 +332,11 @@ def solve_cipher_unified(prompt: str, target_answer: str = None, mode: str = 'gr
                         B_vals = [digit_map[c] for c in current_ex['B']]
                         out_vals = [digit_map[c] for c in current_ex['out']]
                         
-                        L_ex, R_ex, _, _, _, _ = PRE_OPS[p](A_vals, B_vals)
+                        L_ex, R_ex, _, _, _, _ = FORMATTERS[f]['pre'](A_vals, B_vals)
                         expected_ex = MID_OPS[op_map[current_ex['op']]](L_ex, R_ex, 0, 0, 0, 0)
                         
-                        s_res = str(expected_ex)
-                        s_res_abs = s_res[1:] if s_res.startswith('-') else s_res
-                        fmt_ex = POST_OPS[f](s_res_abs)
-                        if f == 'rev' and s_res.startswith('-'): fmt_ex = '-' + fmt_ex
-                        elif f == 'swap' and s_res.startswith('-'): fmt_ex = '-' + fmt_ex
-                            
+                        fmt_ex = FORMATTERS[f]['post'](expected_ex)
+                        
                         decOut = "".join(str(d) for d in out_vals)
                         math_op = op_map[current_ex['op']]
                         print(f"  Eq {ex_num+1}: {L_ex} {math_op} {R_ex} -> Math: {expected_ex} -> Fmt: {fmt_ex} == {decOut}")
