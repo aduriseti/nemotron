@@ -9,11 +9,13 @@ dependencies = [
     "jupytext>=1.19.1",
     "kaggle>=2.0.1",
     "modal>=1.4.1",
+    "ortools>=9.15.6755",
     "pydantic>=2.12.1",
     "tinker>=0.16.1",
     "tinker-cookbook>=0.3.0",
     "torch>=2.11.0",
     "transformers==4.57.6",
+    "z3-solver>=4.16.0.0",
 ]
 
 [dependency-groups]
