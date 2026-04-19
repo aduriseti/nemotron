@@ -369,11 +369,18 @@ def solve_cipher_unified(
             tgt_ex = {'A': tA, 'B': tB, 'op': tgt_op_str, 'out': []}
             tA0s, tA1s, tB0s, tB1s = _syms_for_pipeline(tgt_ex, f_type)
 
+            # When target op not seen in training, try all ops (cryptarithm_guess)
+            tgt_op_seen = any(ex['op'] == tgt_op_str for ex in parsed_examples)
+
             for digit_map, op_assign in solutions:
                 sol_count += 1
-                tgt_math_op = op_assign.get(tgt_op_str)
-                if not tgt_math_op:
-                    continue
+                if tgt_op_seen:
+                    tgt_math_op = op_assign.get(tgt_op_str)
+                    if not tgt_math_op:
+                        continue
+                    candidate_ops = [tgt_math_op]
+                else:
+                    candidate_ops = op_names
 
                 target_syms_4 = (tA0s, tA1s, tB0s, tB1s)
                 unique_missing = list(dict.fromkeys(s for s in target_syms_4 if s not in digit_map))
@@ -391,22 +398,23 @@ def solve_cipher_unified(
 
                 for dm in maps_to_try:
                     ta0, ta1, tb0, tb1 = dm[tA0s], dm[tA1s], dm[tB0s], dm[tB1s]
-                    try:
-                        L_tgt = ta0 * 10 + ta1
-                        R_tgt = tb0 * 10 + tb1
-                        numeric_ans = MATH_OPS[tgt_math_op]['fn'](L_tgt, R_tgt, 0, 0, 0, 0)
-                    except (ZeroDivisionError, ValueError, OverflowError):
-                        continue
+                    L_tgt = ta0 * 10 + ta1
+                    R_tgt = tb0 * 10 + tb1
+                    for tgt_math_op in candidate_ops:
+                        try:
+                            numeric_ans = MATH_OPS[tgt_math_op]['fn'](L_tgt, R_tgt, 0, 0, 0, 0)
+                        except (ZeroDivisionError, ValueError, OverflowError):
+                            continue
 
-                    encoded = _encode_answer(
-                        numeric_ans, tgt_math_op, tgt_op_str, f_type,
-                        dm, digit_sym_list, ops_used,
-                    )
-                    if encoded is not None:
-                        possible_answers[encoded] = possible_answers.get(encoded, 0) + 1
-                        pipeline_answers[encoded] = pipeline_answers.get(encoded, 0) + 1
-                        if target_answer is not None and encoded == str(target_answer):
-                            target_hits += 1
+                        encoded = _encode_answer(
+                            numeric_ans, tgt_math_op, tgt_op_str, f_type,
+                            dm, digit_sym_list, ops_used,
+                        )
+                        if encoded is not None:
+                            possible_answers[encoded] = possible_answers.get(encoded, 0) + 1
+                            pipeline_answers[encoded] = pipeline_answers.get(encoded, 0) + 1
+                            if target_answer is not None and encoded == str(target_answer):
+                                target_hits += 1
 
             elapsed = time.time() - start
             timed_out = elapsed >= 2.0
