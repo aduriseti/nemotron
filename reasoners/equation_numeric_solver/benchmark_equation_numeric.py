@@ -167,6 +167,7 @@ def solve_equation_pipeline(prompt, target_answer=None, mode='greedy'):
         
     return None if mode == 'greedy' else False
 
+sys.path.insert(0, str(Path(WORKSPACE_DIR) / 'reasoners' / 'equation_numeric_solver'))
 from grammar_solver import solve_with_type_safe_grammar
 
 # %% [markdown]

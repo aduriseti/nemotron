@@ -16,3 +16,5 @@ reasoning/
 corpus/
 generated_notebooks/
 benchmark_failures/
+cot_traces/
+reasoners/cot_lang/traces/
