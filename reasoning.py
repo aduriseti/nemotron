@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from reasoners.bit_manipulation import reasoning_bit_manipulation
+from reasoners.bit_manipulation_tt import reasoning_bit_manipulation_tt as reasoning_bit_manipulation
 from reasoners.cipher import reasoning_cipher
 from reasoners.equation_numeric import reasoning_equation_numeric
 from reasoners.cryptarithm import reasoning_cryptarithm
@@ -131,8 +131,9 @@ def main() -> None:
                 existing[entry["id"]] = entry
 
     if REASONING_DIR.exists():
-        shutil.rmtree(REASONING_DIR)
-    REASONING_DIR.mkdir(parents=True)
+        for f in REASONING_DIR.glob("*"):
+            f.unlink()
+    REASONING_DIR.mkdir(parents=True, exist_ok=True)
     INVESTIGATIONS_DIR.mkdir(parents=True, exist_ok=True)
 
     stats: dict[str, bool] = {}
@@ -140,7 +141,10 @@ def main() -> None:
     generated = 0
     skipped = 0
 
-    for entry in existing.values():
+    from tqdm import tqdm
+    pbar = tqdm(existing.values(), total=len(existing), unit="problem")
+
+    for entry in pbar:
         pid = entry["id"]
         category = entry["category"]
 
@@ -160,6 +164,7 @@ def main() -> None:
             existing[pid]["submission"] = ""
             continue
 
+        pbar.set_postfix(cat=category[:15], id=pid[:8])
         problem = Problem.load_from_json(pid)
         t0 = time.perf_counter()
         reasoning_text = generator(problem)
