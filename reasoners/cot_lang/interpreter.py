@@ -1,11 +1,16 @@
 """cotl (Chain-of-Thought Language) interpreter.
 
 Grammar:
-    program      := instruction*
-    instruction  := assignment | emit_stmt | answer_stmt | comment | blank
+    program      := func_def* instruction*
+    func_def     := 'FUNCTION' name '(' (name (',' name)*)? ')' '->' name
+                        instruction*
+                    'END'
+    instruction  := assignment | emit_stmt | answer_stmt | block_stmt | cond_goto | comment | blank
     assignment   := '$' name '=' expr  ('# ' comment)?
     emit_stmt    := 'EMIT' string_literal
     answer_stmt  := 'ANSWER' expr
+    block_stmt   := 'BLOCK' name
+    cond_goto    := 'IF' ('NOT')? '$' name ':' 'GOTO' name
 
     expr         := or_expr
     or_expr      := xor_expr ('|' xor_expr)*
@@ -199,7 +204,11 @@ class _P:
 # ── Evaluator ─────────────────────────────────────────────────────────────────
 
 
-def _ev(node: tuple, regs: dict[str, Value]) -> Value:
+def _ev(
+    node: tuple,
+    regs: dict[str, Value],
+    funcs: dict[str, tuple[list[str], list[str], str]] | None = None,
+) -> Value:
     k = node[0]
 
     if k == "lit":
@@ -213,7 +222,7 @@ def _ev(node: tuple, regs: dict[str, Value]) -> Value:
 
     if k == "idx":
         seq = regs[node[1]]
-        i = _ev(node[2], regs)
+        i = _ev(node[2], regs, funcs)
         if isinstance(i, bool):
             i = int(i)
         if isinstance(i, str):
@@ -221,7 +230,7 @@ def _ev(node: tuple, regs: dict[str, Value]) -> Value:
         return seq[i]  # type: ignore[index]
 
     if k == "unary":
-        v = _ev(node[2], regs)
+        v = _ev(node[2], regs, funcs)
         if node[1] == "~":
             if v == "0":
                 return "1"
@@ -235,8 +244,8 @@ def _ev(node: tuple, regs: dict[str, Value]) -> Value:
 
     if k == "bin":
         op = node[1]
-        lv = _ev(node[2], regs)
-        rv = _ev(node[3], regs)
+        lv = _ev(node[2], regs, funcs)
+        rv = _ev(node[3], regs, funcs)
 
         # bit ops on single '0'/'1' chars
         if (
@@ -284,7 +293,11 @@ def _ev(node: tuple, regs: dict[str, Value]) -> Value:
 
     if k == "call":
         name, raw_args = node[1], node[2]
-        args = [_ev(a, regs) for a in raw_args]
+        args = [_ev(a, regs, funcs) for a in raw_args]
+
+        # user-defined functions take priority
+        if funcs and name in funcs:
+            return _call_function(name, args, funcs)
 
         if name == "ROT":
             s, k2 = args[0], int(args[1])
@@ -332,6 +345,75 @@ def _ev(node: tuple, regs: dict[str, Value]) -> Value:
 # ── Interpreter ───────────────────────────────────────────────────────────────
 
 _ASSIGN_RE = re.compile(r"^\$([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+)$")
+_BLOCK_RE = re.compile(r"^BLOCK\s+(\S+)$", re.IGNORECASE)
+_COND_GOTO_RE = re.compile(
+    r"^IF\s+(NOT\s+)?\$([A-Za-z_][A-Za-z0-9_]*)\s*:\s*GOTO\s+(\S+)$", re.IGNORECASE
+)
+_FUNC_DEF_RE = re.compile(
+    r"^FUNCTION\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*->\s*([A-Za-z_][A-Za-z0-9_]*)$",
+    re.IGNORECASE,
+)
+_FUNC_END_RE = re.compile(r"^END$", re.IGNORECASE)
+_FUNC_RETURN_RE = re.compile(r"^RETURN\s+\$([A-Za-z_][A-Za-z0-9_]*)$", re.IGNORECASE)
+
+
+def _scan_functions(lines: list[str]) -> dict[str, tuple[list[str], list[str], str]]:
+    """Pre-scan program lines for FUNCTION definitions.
+
+    Returns {name: (params, body_lines, return_var)}.
+    """
+    funcs: dict[str, tuple[list[str], list[str], str]] = {}
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        fm = _FUNC_DEF_RE.match(stripped)
+        if fm:
+            fname = fm.group(1)
+            params = [p.strip() for p in fm.group(2).split(",") if p.strip()]
+            ret_var = fm.group(3)
+            i += 1
+            body: list[str] = []
+            while i < len(lines):
+                bline = lines[i].strip()
+                if _FUNC_END_RE.match(bline):
+                    i += 1
+                    break
+                body.append(bline)
+                i += 1
+            funcs[fname] = (params, body, ret_var)
+        else:
+            i += 1
+    return funcs
+
+
+def _call_function(
+    fname: str,
+    arg_vals: list[Value],
+    funcs: dict[str, tuple[list[str], list[str], str]],
+) -> Value:
+    """Execute a user-defined function and return its result."""
+    params, body, ret_var = funcs[fname]
+    local: dict[str, Value] = dict(zip(params, arg_vals))
+
+    for raw in body:
+        bline = raw.strip()
+        if not bline or bline.startswith("#"):
+            continue
+        expr_part = _strip_inline_comment(bline)
+        # support explicit RETURN inside body
+        rm = _FUNC_RETURN_RE.match(expr_part)
+        if rm:
+            return local[rm.group(1)]
+        m = _ASSIGN_RE.match(expr_part)
+        if m:
+            vname, expr_txt = m.group(1), m.group(2).strip()
+            toks = _tokenise(expr_txt)
+            val = _ev(_P(toks).expr(), local, funcs)
+            local[vname] = val
+        else:
+            raise SyntaxError(f"invalid line in function body: {bline!r}")
+
+    return local[ret_var]
 
 
 def _strip_inline_comment(line: str) -> str:
@@ -353,17 +435,35 @@ def _repr(val: Value) -> str:
 
 
 class Interpreter:
-    def run(self, source: str) -> tuple[str, list[str]]:
+    def run(
+        self, source: str, context: dict[str, Value] | None = None
+    ) -> tuple[str, list[str]]:
         """Execute a cotl program.
 
         Returns (answer, trace) where trace is the executed lines with
         computed results interleaved as comments.
+
+        context: optional dict pre-loaded into registers before execution.
+        BLOCK/GOTO provide interpreter-level control flow (not executed by LLM).
         """
-        regs: dict[str, Value] = {}
+        lines = source.splitlines()
+        regs: dict[str, Value] = dict(context) if context else {}
         trace: list[str] = []
         answer: str | None = None
 
-        for raw in source.splitlines():
+        # pre-scan: collect user-defined functions and BLOCK labels
+        funcs = _scan_functions(lines)
+        labels: dict[str, int] = {}
+        for i, raw in enumerate(lines):
+            stripped = raw.strip()
+            bm = _BLOCK_RE.match(stripped)
+            if bm:
+                labels[bm.group(1)] = i
+
+        pc = 0
+        while pc < len(lines):
+            raw = lines[pc]
+            pc += 1
             line = raw.strip()
 
             if not line or line.startswith("#"):
@@ -373,10 +473,20 @@ class Interpreter:
             expr_part = _strip_inline_comment(line)
             upper = expr_part.upper()
 
+            # skip FUNCTION definition blocks (already pre-scanned)
+            if upper.startswith("FUNCTION"):
+                # advance pc past the body until END
+                while pc < len(lines):
+                    inner = lines[pc].strip().upper()
+                    pc += 1
+                    if inner == "END":
+                        break
+                continue
+
             if upper.startswith("ANSWER"):
                 val_txt = expr_part[6:].strip()
                 toks = _tokenise(val_txt)
-                val = _ev(_P(toks).expr(), regs)
+                val = _ev(_P(toks).expr(), regs, funcs)
                 answer = str(val)
                 trace.append(f"ANSWER {val_txt}  # {_repr(val)}")
                 break
@@ -390,11 +500,31 @@ class Interpreter:
                 trace.append('EMIT "' + re.sub(r"\{\$(\w+)\}", _sub, msg) + '"')
                 continue
 
+            bm = _BLOCK_RE.match(expr_part)
+            if bm:
+                trace.append(expr_part)
+                continue
+
+            cg = _COND_GOTO_RE.match(expr_part)
+            if cg:
+                negated = bool(cg.group(1))
+                vname = cg.group(2)
+                label = cg.group(3)
+                val = regs.get(vname, False)
+                take = (not val) if negated else bool(val)
+                if take:
+                    trace.append(f"{expr_part}  # REJECTED")
+                    if label not in labels:
+                        raise NameError(f"undefined label: {label!r}")
+                    pc = labels[label]
+                # if not taken: silently skip (no trace line)
+                continue
+
             m = _ASSIGN_RE.match(expr_part)
             if m:
                 vname, expr_txt = m.group(1), m.group(2).strip()
                 toks = _tokenise(expr_txt)
-                val = _ev(_P(toks).expr(), regs)
+                val = _ev(_P(toks).expr(), regs, funcs)
                 regs[vname] = val
                 trace.append(f"${vname} = {expr_txt}  # {_repr(val)}")
                 continue

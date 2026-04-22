@@ -18,3 +18,5 @@ generated_notebooks/
 benchmark_failures/
 cot_traces/
 reasoners/cot_lang/traces/
+*.cotl
+*_raw.cotl
