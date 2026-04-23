@@ -116,34 +116,41 @@ def _emit_block_raw(
     lines.append(f"$xfmA_q = {xfm(0, '$query')}")
     lines.append(f"$xfmB_q = {xfm(1, '$query')}")
     lines.append(f"$xfmC_q = {xfm(2, '$query')}")
-    lines.append("")
 
     for pos in range(8):
-        for ex in range(N_EX):
-            pfx = f"e{ex}p{pos}"
-            lines.append(f"$a_{pfx} = $xfmA_e{ex}[{pos}]")
-            lines.append(f"$b_{pfx} = $xfmB_e{ex}[{pos}]")
-            lines.append(f"$c_{pfx} = $xfmC_e{ex}[{pos}]")
-            lines.append(f"$ia_{pfx} = INT($a_{pfx})")
-            lines.append(f"$ib_{pfx} = INT($b_{pfx})")
-            lines.append(f"$ib2_{pfx} = $ib_{pfx} * 2")
-            lines.append(f"$ic_{pfx} = INT($c_{pfx})")
-            lines.append(f"$ic4_{pfx} = $ic_{pfx} * 4")
-            lines.append(f"$idx1_{pfx} = $ia_{pfx} + $ib2_{pfx}")
-            lines.append(f"$idx_{pfx} = $idx1_{pfx} + $ic4_{pfx}")
-            lines.append(f"$got_{pfx} = $tt_str[$idx_{pfx}]")
-            lines.append(f"$want_{pfx} = $ex{ex}_out[{pos}]")
-            lines.append(f"$ok_{pfx} = $got_{pfx} == $want_{pfx}")
-            if next_label:
-                lines.append(f"IF NOT $ok_{pfx}: GOTO {next_label}")
+        lines.append(f"$pos{pos} = {pos}")
+    lines.append("")
+
+    for ex in range(N_EX):
+        pfx = f"e{ex}"
+        for pos in range(8):
+            ppfx = f"{pfx}_p{pos}"
+            lines.append(f"$a_{ppfx} = $xfmA_{pfx}[$pos{pos}]")
+            lines.append(f"$b_{ppfx} = $xfmB_{pfx}[$pos{pos}]")
+            lines.append(f"$c_{ppfx} = $xfmC_{pfx}[$pos{pos}]")
+            lines.append(f"$ia_{ppfx} = INT($a_{ppfx})")
+            lines.append(f"$ib_{ppfx} = INT($b_{ppfx})")
+            lines.append(f"$ib2_{ppfx} = $ib_{ppfx} * 2")
+            lines.append(f"$ic_{ppfx} = INT($c_{ppfx})")
+            lines.append(f"$ic4_{ppfx} = $ic_{ppfx} * 4")
+            lines.append(f"$idx1_{ppfx} = $ia_{ppfx} + $ib2_{ppfx}")
+            lines.append(f"$idx_{ppfx} = $idx1_{ppfx} + $ic4_{ppfx}")
+            lines.append(f"$got_{ppfx} = $tt_str[$idx_{ppfx}]")
             lines.append("")
+        lines.append(f"$pred_{pfx} = $got_{pfx}_p0")
+        for pos in range(1, 8):
+            lines.append(f"$pred_{pfx} = $pred_{pfx} + $got_{pfx}_p{pos}")
+        lines.append(f"$ok_{pfx} = $pred_{pfx} == $ex{ex}_out")
+        if next_label:
+            lines.append(f"IF NOT $ok_{pfx}: GOTO {next_label}")
+        lines.append("")
 
     lines.append("# apply rule to query")
     for pos in range(8):
         pfx = f"qp{pos}"
-        lines.append(f"$a_{pfx} = $xfmA_q[{pos}]")
-        lines.append(f"$b_{pfx} = $xfmB_q[{pos}]")
-        lines.append(f"$c_{pfx} = $xfmC_q[{pos}]")
+        lines.append(f"$a_{pfx} = $xfmA_q[$pos{pos}]")
+        lines.append(f"$b_{pfx} = $xfmB_q[$pos{pos}]")
+        lines.append(f"$c_{pfx} = $xfmC_q[$pos{pos}]")
         lines.append(f"$ia_{pfx} = INT($a_{pfx})")
         lines.append(f"$ib_{pfx} = INT($b_{pfx})")
         lines.append(f"$ib2_{pfx} = $ib_{pfx} * 2")

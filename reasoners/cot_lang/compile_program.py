@@ -125,13 +125,27 @@ def _normalize(
 # ── BPE pair mining ───────────────────────────────────────────────────────────
 
 
+def _next_block_index(lines: list[str]) -> list[int]:
+    """For each index i, return the index of the nearest BLOCK line at or after i."""
+    n = len(lines)
+    result = [n] * n
+    nxt = n
+    for j in range(n - 1, -1, -1):
+        if lines[j].startswith("BLOCK "):
+            nxt = j
+        result[j] = nxt
+    return result
+
+
 def _mine_best_pair(
     lines: list[str],
     known_sigs: set[str],
 ) -> tuple[str, int, list[str], str] | None:
     counts: dict[str, list] = {}
+    n = len(lines)
+    next_block = _next_block_index(lines)
 
-    for start in range(len(lines) - 1):
+    for start in range(n - 1):
         window = lines[start : start + 2]
         result = _normalize(window)
         if result is None:
@@ -140,7 +154,8 @@ def _mine_best_pair(
         if sig in known_sigs:
             continue
         if intermediates:
-            lookahead = " ".join(lines[start + 2 : start + 4])
+            end = next_block[start + 2] if start + 2 < n else n
+            lookahead = " ".join(lines[start + 2 : end])
             if any(f"${v}" in lookahead for v in intermediates):
                 continue
         n_inputs = len(conc_inputs)
@@ -177,14 +192,7 @@ def _rewrite(
         if i + pat_len <= len(lines):
             window = lines[i : i + pat_len]
             norm = _normalize(window)
-            if (
-                norm
-                and norm[0] == sig
-                and not any(
-                    f"${v}" in " ".join(lines[i + pat_len : i + pat_len + 4])
-                    for v in norm[3]
-                )
-            ):
+            if norm and norm[0] == sig:
                 conc_inputs, ret_var = norm[1], norm[2]
                 args_str = ", ".join(f"${v}" for v in conc_inputs)
                 result.append(f"${ret_var} = {fn_name}({args_str})")
@@ -202,7 +210,6 @@ def main() -> None:
     from tqdm import tqdm
 
     buffer: list[str] = []
-    above_trigger = False
     known_sigs: set[str] = set()
     used_names: set[str] = set()
     extracted: list[tuple[str, str, list[str], str, int]] = []
@@ -232,16 +239,20 @@ def main() -> None:
         )
         return True
 
+    trigger_at = TRIGGER_LINES
+
     pbar = tqdm(
         iter_blocks(), desc="blocks", unit="blk", total=4644, dynamic_ncols=True
     )
     for block_lines in pbar:
+        for fn_name, sig, _params, _ret, pat_len in extracted:
+            block_lines = _rewrite(block_lines, fn_name, sig, pat_len)
         buffer.extend(block_lines)
 
-        now_above = len(buffer) >= TRIGGER_LINES
-        if now_above and not above_trigger and len(extracted) < MAX_FUNCTIONS:
-            _run_one_bpe_round()
-        above_trigger = len(buffer) >= TRIGGER_LINES
+        while len(buffer) >= trigger_at and len(extracted) < MAX_FUNCTIONS:
+            if not _run_one_bpe_round():
+                trigger_at = len(buffer) + TRIGGER_LINES
+                break
         pbar.set_postfix(lines=f"{len(buffer):,}", fns=len(extracted))
 
     pbar.close()
