@@ -21,7 +21,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from reasoners.bit_manipulation_tt import reasoning_bit_manipulation_tt as reasoning_bit_manipulation
+from reasoners.bit_manipulation_infer import reasoning_bit_manipulation_infer as reasoning_bit_manipulation
 from reasoners.cipher import reasoning_cipher
 from reasoners.equation_numeric import reasoning_equation_numeric
 from reasoners.cryptarithm import reasoning_cryptarithm

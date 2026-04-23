@@ -17,7 +17,7 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).parent / "bit_manipulation_solver"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from bit_solver_tt import find_rule, _transform_bit, _apply, KNOWN_FUNCTIONS
+from bit_solver_tt import find_rule as _find_rule_tt, _transform_bit, _apply, KNOWN_FUNCTIONS
 
 from reasoners.store_types import Problem
 
@@ -88,7 +88,7 @@ def _apply_trans_byte(in_bits: list[int], trans: tuple) -> str:
     return ''.join(result)
 
 
-def reasoning_bit_manipulation_tt(problem: Problem) -> Optional[str]:
+def reasoning_bit_manipulation_tt(problem: Problem, solver=_find_rule_tt) -> Optional[str]:
     examples = problem.examples
     if not examples:
         return None
@@ -104,7 +104,7 @@ def reasoning_bit_manipulation_tt(problem: Problem) -> Optional[str]:
     if any(len(a) != 8 for a in in_arrays + out_arrays) or len(target_bits) != 8:
         return None
 
-    answer, bit_checks, rule_info = find_rule(in_arrays, out_arrays, target_bits)
+    answer, bit_checks, rule_info = solver(in_arrays, out_arrays, target_bits)
     if answer is None:
         return None
 
