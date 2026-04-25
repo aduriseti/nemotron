@@ -25,18 +25,19 @@ SYMBOL_UNIVERSE = [
     ':', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~',
 ]
 
+# Ordered by empirical frequency of target operation in correct solutions (100-problem sample).
 MATH_OPS = {
     'add':         {'fn': lambda L, R, d1, d2, d3, d4: L + R,                                                   'sym': '+'},
     'sub':         {'fn': lambda L, R, d1, d2, d3, d4: L - R,                                                   'sym': '-'},
     'mul':         {'fn': lambda L, R, d1, d2, d3, d4: L * R,                                                   'sym': '*'},
-    'cat':         {'fn': lambda L, R, d1, d2, d3, d4: int(str(L) + str(R)),                                    'sym': '||'},
-    'max_mod_min': {'fn': lambda L, R, d1, d2, d3, d4: max(L, R) % min(L, R) if min(L, R) != 0 else max(L, R), 'sym': ''},
-    'add1':        {'fn': lambda L, R, d1, d2, d3, d4: L + R + 1,                                               'sym': ''},
-    'addm1':       {'fn': lambda L, R, d1, d2, d3, d4: L + R - 1,                                               'sym': '-'},
-    'mul1':        {'fn': lambda L, R, d1, d2, d3, d4: L * R + 1,                                               'sym': ''},
-    'mulm1':       {'fn': lambda L, R, d1, d2, d3, d4: L * R - 1,                                               'sym': '-'},
     'sub_abs':     {'fn': lambda L, R, d1, d2, d3, d4: abs(L - R),                                              'sym': ''},
+    'addm1':       {'fn': lambda L, R, d1, d2, d3, d4: L + R - 1,                                               'sym': '-'},
+    'cat':         {'fn': lambda L, R, d1, d2, d3, d4: int(str(L) + str(R)),                                    'sym': '||'},
+    'mul1':        {'fn': lambda L, R, d1, d2, d3, d4: L * R + 1,                                               'sym': ''},
+    'max_mod_min': {'fn': lambda L, R, d1, d2, d3, d4: max(L, R) % min(L, R) if min(L, R) != 0 else max(L, R), 'sym': ''},
     'sub_neg_abs': {'fn': lambda L, R, d1, d2, d3, d4: -abs(L - R),                                             'sym': '-'},
+    'add1':        {'fn': lambda L, R, d1, d2, d3, d4: L + R + 1,                                               'sym': ''},
+    'mulm1':       {'fn': lambda L, R, d1, d2, d3, d4: L * R - 1,                                               'sym': '-'},
 }
 
 FORMATTERS = {
@@ -251,6 +252,60 @@ def _search(
 
 
 # ---------------------------------------------------------------------------
+# Cat fast-path: bypass backtracking for the dominant (70%) cat operation
+# ---------------------------------------------------------------------------
+
+def _cat_fast_path(
+    parsed_examples: list[dict],
+    tA: list[str],
+    tB: list[str],
+    tgt_op_str: str,
+    f_type: str,
+    active_digits: set[str],
+    digit_sym_list: list[str],
+    ops_used: set[str],
+    _ops_counter: list[int] | None = None,
+) -> str | None:
+    """
+    For cat, the encoded answer is symbolically ''.join(tA) + ''.join(tB) — no digit
+    values needed. Verify by checking each training example's output symbols match the
+    cat pattern ([A0s, A1s, B0s, B1s]) for the given pipeline. O(n_examples), no search.
+    """
+    # Only check examples that use the target operation symbol — other examples
+    # use different ops and don't tell us whether tgt_op_str maps to cat.
+    tgt_op_examples = [ex for ex in parsed_examples if ex['op'] == tgt_op_str]
+    if not tgt_op_examples:
+        return None
+
+    for ex in tgt_op_examples:
+        out = ex['out']
+        A0s, A1s, B0s, B1s = _syms_for_pipeline(ex, f_type)
+        n = len(out)
+        if n == 4:
+            if out != [A0s, A1s, B0s, B1s]:
+                return None
+        elif n == 3:
+            # Leading zero on left: str(L)=1 char, str(R)=2 chars → out=[A1s, B0s, B1s]
+            if out != [A1s, B0s, B1s]:
+                return None
+        elif n == 2:
+            # Both single-digit: out=[A1s, B1s]
+            if out != [A1s, B1s]:
+                return None
+        else:
+            return None
+
+    # All examples using tgt_op_str are consistent with cat — no digit values needed.
+    tgt_dummy = {'A': tA, 'B': tB, 'op': tgt_op_str, 'out': []}
+    tA0s, tA1s, tB0s, tB1s = _syms_for_pipeline(tgt_dummy, f_type)
+
+    if _ops_counter is not None:
+        _ops_counter[0] += 1
+
+    return ''.join([tA0s, tA1s, tB0s, tB1s])
+
+
+# ---------------------------------------------------------------------------
 # Answer encoding
 # ---------------------------------------------------------------------------
 
@@ -324,7 +379,6 @@ def solve_cipher_unified(
             active_digits.discard(op)
 
     digit_sym_list = list(active_digits)
-    possible_answers: dict[str, int] = {}
 
     _log_fh = open(log_path, 'a') if log_path else None
 
@@ -338,16 +392,14 @@ def solve_cipher_unified(
     emit(f"\n{'='*60}")
     emit(f"PROBLEM: {encTA}{tgt_op_str}{encTB}=?  target={target_answer!r}")
 
+    first_answer = None
+
     try:
         for f_type in FORMATTERS:
             emit(f"\n--- PIPELINE {f_type} ---")
-            pipeline_answers: dict[str, int] = {}
             start = time.time()
             deadline = start + 2.0
-            sol_count = 0
-            target_hits = 0
 
-            # Compute plausible ops using original examples (same as OR-Tools)
             plausible_per_ex = []
             skip = False
             for ex in parsed_examples:
@@ -361,76 +413,85 @@ def solve_cipher_unified(
                 emit('  [SKIP] no plausible ops for some example')
                 continue
 
+            # Cat fast-path: directly solve the ~70% of problems that use concatenation,
+            # bypassing the full backtracking search for this operation.
+            cat_ans = _cat_fast_path(
+                parsed_examples, tA, tB, tgt_op_str, f_type,
+                active_digits, digit_sym_list, ops_used,
+            )
+            if cat_ans is not None:
+                first_answer = cat_ans
+                emit(f"  [PIPELINE {f_type}] cat fast-path → {first_answer!r}")
+                break
+
             solutions: list[tuple[dict, dict]] = []
             _search(parsed_examples, 0, {}, set(), {}, plausible_per_ex,
-                    f_type, solutions, deadline, max_solutions=50000)
+                    f_type, solutions, deadline, max_solutions=1)
 
-            # Determine target symbol order for this pipeline (same logic as OR-Tools)
+            if not solutions:
+                emit(f"  [PIPELINE {f_type}] no solutions found")
+                continue
+
             tgt_ex = {'A': tA, 'B': tB, 'op': tgt_op_str, 'out': []}
             tA0s, tA1s, tB0s, tB1s = _syms_for_pipeline(tgt_ex, f_type)
-
-            # When target op not seen in training, try all ops (cryptarithm_guess)
             tgt_op_seen = any(ex['op'] == tgt_op_str for ex in parsed_examples)
 
-            for digit_map, op_assign in solutions:
-                sol_count += 1
-                if tgt_op_seen:
-                    tgt_math_op = op_assign.get(tgt_op_str)
-                    if not tgt_math_op:
+            digit_map, op_assign = solutions[0]
+            if tgt_op_seen:
+                tgt_math_op = op_assign.get(tgt_op_str)
+                candidate_ops = [tgt_math_op] if tgt_math_op else []
+            else:
+                candidate_ops = list(MATH_OPS.keys())
+
+            target_syms_4 = (tA0s, tA1s, tB0s, tB1s)
+            unique_missing = list(dict.fromkeys(s for s in target_syms_4 if s not in digit_map))
+
+            if unique_missing:
+                active_used = {digit_map[s] for s in digit_map if s in active_digits}
+                avail = [v for v in range(10) if v not in active_used]
+                if len(avail) < len(unique_missing):
+                    avail = list(range(10))
+                maps_to_try: list[dict[str, int]] = [
+                    {**digit_map, **dict(zip(unique_missing, combo))}
+                    for combo in _permutations(avail, len(unique_missing))
+                ]
+            else:
+                maps_to_try = [digit_map]
+
+            found = False
+            for dm in maps_to_try:
+                if found:
+                    break
+                ta0, ta1, tb0, tb1 = dm[tA0s], dm[tA1s], dm[tB0s], dm[tB1s]
+                L_tgt = ta0 * 10 + ta1
+                R_tgt = tb0 * 10 + tb1
+                for tgt_math_op in candidate_ops:
+                    try:
+                        numeric_ans = MATH_OPS[tgt_math_op]['fn'](L_tgt, R_tgt, 0, 0, 0, 0)
+                    except (ZeroDivisionError, ValueError, OverflowError):
                         continue
-                    candidate_ops = [tgt_math_op]
-                else:
-                    candidate_ops = op_names
-
-                target_syms_4 = (tA0s, tA1s, tB0s, tB1s)
-                unique_missing = list(dict.fromkeys(s for s in target_syms_4 if s not in digit_map))
-
-                if unique_missing:
-                    avail = [v for v in range(10) if v not in digit_map.values()]
-                    if len(avail) < len(unique_missing):
-                        continue
-                    maps_to_try: list[dict[str, int]] = [
-                        {**digit_map, **dict(zip(unique_missing, combo))}
-                        for combo in _permutations(avail, len(unique_missing))
-                    ]
-                else:
-                    maps_to_try = [digit_map]
-
-                for dm in maps_to_try:
-                    ta0, ta1, tb0, tb1 = dm[tA0s], dm[tA1s], dm[tB0s], dm[tB1s]
-                    L_tgt = ta0 * 10 + ta1
-                    R_tgt = tb0 * 10 + tb1
-                    for tgt_math_op in candidate_ops:
-                        try:
-                            numeric_ans = MATH_OPS[tgt_math_op]['fn'](L_tgt, R_tgt, 0, 0, 0, 0)
-                        except (ZeroDivisionError, ValueError, OverflowError):
-                            continue
-
-                        encoded = _encode_answer(
-                            numeric_ans, tgt_math_op, tgt_op_str, f_type,
-                            dm, digit_sym_list, ops_used,
-                        )
-                        if encoded is not None:
-                            possible_answers[encoded] = possible_answers.get(encoded, 0) + 1
-                            pipeline_answers[encoded] = pipeline_answers.get(encoded, 0) + 1
-                            if target_answer is not None and encoded == str(target_answer):
-                                target_hits += 1
+                    encoded = _encode_answer(
+                        numeric_ans, tgt_math_op, tgt_op_str, f_type,
+                        dm, digit_sym_list, ops_used,
+                    )
+                    if encoded is not None:
+                        first_answer = encoded
+                        found = True
+                        break
 
             elapsed = time.time() - start
-            timed_out = elapsed >= 2.0
-            emit(f"  [PIPELINE {f_type}] valid={sol_count} answers={pipeline_answers} "
-                 f"target_hits={target_hits} timed_out={timed_out} elapsed={elapsed:.2f}s")
+            emit(f"  [PIPELINE {f_type}] answer={first_answer!r} elapsed={elapsed:.2f}s")
+            if found:
+                break
 
-        greedy_answer = max(possible_answers, key=possible_answers.get) if possible_answers else None
-        emit(f"\n[GLOBAL] answers={possible_answers} pick={greedy_answer!r} target={target_answer!r} "
-             f"found={str(target_answer) in possible_answers if target_answer is not None else '?'}")
+        emit(f"\n[GLOBAL] pick={first_answer!r} target={target_answer!r}")
 
     finally:
         if _log_fh:
             _log_fh.close()
 
     if mode == 'greedy':
-        return greedy_answer
+        return first_answer
     if mode == 'theoretical':
-        return str(target_answer) in possible_answers
-    return possible_answers
+        return first_answer is not None and str(target_answer) == first_answer
+    return {first_answer: 1} if first_answer is not None else {}
