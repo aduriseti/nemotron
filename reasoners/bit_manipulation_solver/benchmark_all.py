@@ -17,13 +17,19 @@ import reasoners.bit_manipulation_solver.bit_solver_v2_vsids   as v2
 import reasoners.bit_manipulation_solver.bit_solver_v3_freqord as v3
 import reasoners.bit_manipulation_solver.bit_solver_v4_exlimit as v4
 import reasoners.bit_manipulation_solver.bit_solver_v5_symbreak as v5
+import reasoners.bit_manipulation_solver.bit_solver_v6_a2prune as v6
+import reasoners.bit_manipulation_solver.bit_solver_v7_3pairs  as v7
+import reasoners.bit_manipulation_solver.bit_solver_v8_sliding as v8
 
 SOLVERS = [
     ("v1_base",    v1,  {}),
     ("v2_vsids",   v2,  {}),
     ("v3_freqord", v3,  {}),
-    ("v4_exlimit", v4,  {"n_ex_limit": 0}),   # 0 = use all examples (disabled)
+    ("v4_exlimit", v4,  {"n_ex_limit": 0}),
     ("v5_symbreak",v5,  {}),
+    ("v6_a2prune", v6,  {}),
+    ("v7_3pairs",  v7,  {}),
+    ("v8_sliding", v8,  {}),
 ]
 
 
