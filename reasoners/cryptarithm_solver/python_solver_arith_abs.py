@@ -516,3 +516,119 @@ def solve_v4(
     if mode == 'theoretical':
         return first_answer is not None and str(target_answer) == first_answer
     return {first_answer: 1} if first_answer is not None else {}
+
+
+def solve_v4_all_answers(prompt: str, max_solutions_per_pipeline: int = 200,
+                         deadline_s: float = 5.0) -> set[str]:
+    """Return every distinct target-answer encoding v4 can produce for `prompt`.
+
+    Used by tests to check whether the golden answer is *among* v4's outputs
+    when the puzzle is ambiguous (multiple ciphers consistent with examples).
+    """
+    extraction = extract_all_examples(prompt)
+    if extraction[0] is None:
+        return set()
+    parsed_examples, tA, tB, tgt_op_str = extraction
+
+    a_b_syms: set = set(tA + tB)
+    for ex in parsed_examples:
+        a_b_syms.update(ex['A'] + ex['B'])
+    out_syms_set: set = set()
+    for ex in parsed_examples:
+        out_syms_set.update(ex['out'])
+    active_digits = a_b_syms | out_syms_set
+    ops_used: set = set(ex['op'] for ex in parsed_examples) | {tgt_op_str}
+    for op in list(ops_used):
+        if op not in a_b_syms and len(active_digits) > 10:
+            active_digits.discard(op)
+    digit_sym_list = list(active_digits)
+
+    filtered = [ex for ex in parsed_examples
+                if set(_plausible_ops(ex)) & SUPPORTED_OPS]
+    op_constraints = _precompute_op_constraints(filtered) if filtered else {}
+
+    default_cands = op_constraints.get(tgt_op_str, OP_ORDER)
+    tgt_cands = [o for o in default_cands if o in SUPPORTED_OPS]
+    if not tgt_cands:
+        tgt_cands = list(OP_ORDER)
+
+    answers: set[str] = set()
+
+    for f_type in FORMATTERS_V4:
+        canonical_f, ab_swapped = _normalize_f_type(f_type)
+
+        if ab_swapped:
+            examples_for_search = [_swap_ab(ex) for ex in filtered]
+            tgt_ex_base = {'A': tB, 'B': tA, 'op': tgt_op_str, 'out': []}
+        else:
+            examples_for_search = filtered
+            tgt_ex_base = {'A': tA, 'B': tB, 'op': tgt_op_str, 'out': []}
+
+        cat_ans = _cat_fast_path(
+            [_swap_ab(ex) for ex in parsed_examples] if ab_swapped else parsed_examples,
+            tB if ab_swapped else tA,
+            tA if ab_swapped else tB,
+            tgt_op_str, canonical_f,
+            active_digits, digit_sym_list, ops_used,
+        )
+        if cat_ans is not None:
+            answers.add(cat_ans)
+
+        if not tgt_cands:
+            continue
+
+        reordered = _reorder_examples(examples_for_search, canonical_f)
+        plausible_per_ex = []
+        skip = False
+        for ex in reordered:
+            sym = ex['op']
+            cands = [o for o in op_constraints.get(sym, OP_ORDER) if o in SUPPORTED_OPS]
+            if sym == tgt_op_str:
+                cands = [o for o in cands if o in tgt_cands]
+            if not cands:
+                skip = True
+                break
+            plausible_per_ex.append(cands)
+        if skip:
+            continue
+
+        deadline = time.time() + deadline_s
+        solutions: list = []
+        _search_constrained(reordered, 0, {}, set(), {}, plausible_per_ex,
+                            canonical_f, solutions, deadline,
+                            max_solutions=max_solutions_per_pipeline)
+
+        if not solutions:
+            continue
+
+        tA0s, tA1s, tB0s, tB1s = _syms_for_pipeline(tgt_ex_base, canonical_f)
+
+        for digit_map, op_assign in solutions:
+            tgt_math_op = op_assign.get(tgt_op_str, tgt_cands[0])
+            unique_missing = list(dict.fromkeys(
+                s for s in (tA0s, tA1s, tB0s, tB1s) if s not in digit_map
+            ))
+            if unique_missing:
+                active_used = {digit_map[s] for s in digit_map if s in active_digits}
+                avail = [v for v in range(10) if v not in active_used] or list(range(10))
+                maps_to_try = [
+                    {**digit_map, **dict(zip(unique_missing, combo))}
+                    for combo in _permutations(avail, len(unique_missing))
+                ]
+            else:
+                maps_to_try = [digit_map]
+
+            for dm in maps_to_try:
+                ta0, ta1, tb0, tb1 = dm[tA0s], dm[tA1s], dm[tB0s], dm[tB1s]
+                L_tgt = ta0 * 10 + ta1
+                R_tgt = tb0 * 10 + tb1
+                try:
+                    numeric_ans = MATH_OPS[tgt_math_op]['fn'](L_tgt, R_tgt, 0, 0, 0, 0)
+                except (ZeroDivisionError, ValueError, OverflowError):
+                    continue
+                encoded = _encode_answer(numeric_ans, tgt_math_op, tgt_op_str, canonical_f,
+                                          dm, digit_sym_list, ops_used)
+                if encoded is not None:
+                    answers.add(encoded)
+
+    return answers
