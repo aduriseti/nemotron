@@ -676,6 +676,7 @@ def solve_v8(
     mode: str = 'greedy',
     target_answer: str = None,
     log_path: str = None,
+    deadline_per_pipeline: float = 2.0,
 ) -> Union[str, None]:
     extraction = extract_all_examples(prompt)
     if extraction[0] is None:
@@ -738,7 +739,7 @@ def solve_v8(
         if skip:
             continue
 
-        deadline = time.time() + 2.0
+        deadline = time.time() + deadline_per_pipeline
         solutions: list = []
         _search_constrained(reordered, 0, {}, set(), {}, plausible_per_ex,
                             f_type, solutions, deadline, max_solutions=1)
