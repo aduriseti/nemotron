@@ -135,7 +135,12 @@ def _units_val(op_name: str, a1: int, b1: int, is_neg: bool) -> int:
         return (a1 + b1 - 1 + 10) % 10
     if op_name == 'sub':
         return (a1 - b1 + 10) % 10 if not is_neg else (b1 - a1 + 10) % 10
-    return (a1 * b1) % 10  # mul-like
+    if op_name == 'mul':
+        return (a1 * b1) % 10
+    if op_name == 'mul1':
+        return (a1 * b1 + 1) % 10
+    # mulm1
+    return (a1 * b1 - 1 + 10) % 10
 
 
 def _carry1(op_name: str, a1: int, b1: int, is_neg: bool) -> int:
