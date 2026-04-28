@@ -77,7 +77,9 @@ def _plausible_ops(ex: dict) -> list[str]:
             if val_len <= 5:
                 result.append(name)
         elif name == 'cat':
-            if val_len <= 4:
+            # cat is only valid when both operands are 2-digit (no leading zeros),
+            # so the concatenated result has exactly 4 symbols.
+            if val_len == 4:
                 result.append(name)
     return result
 

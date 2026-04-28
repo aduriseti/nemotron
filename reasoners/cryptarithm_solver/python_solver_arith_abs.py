@@ -12,7 +12,7 @@ v4 also tries: rev_swap  (operands A↔B swapped, digits MSB-first)
 rev_swap lets `sub` compute B−A (positive when B > A), implicitly covering
 sub_abs and sub_neg_abs without adding them as explicit ops.
 
-SUPPORTED_OPS is identical to v3: {add, sub, mul}.
+SUPPORTED_OPS: {add, sub, mul, cat}.
 """
 from __future__ import annotations
 import sys
@@ -36,6 +36,10 @@ from reasoners.cryptarithm_solver.python_solver_prefilter import (
 # ---------------------------------------------------------------------------
 
 SUPPORTED_OPS = frozenset({'add', 'sub', 'mul'})
+# OP_ORDER is the fallback when op_constraints has no data for a symbol.
+# cat is excluded here because cat imposes no column constraints — it should
+# only be tried when op_constraints explicitly says it's plausible (i.e., the
+# example's output shape is consistent with concatenation).
 OP_ORDER = ['add', 'sub', 'mul']
 FORMATTERS_V4 = ['raw', 'swap', 'rev', 'rev_swap']
 
@@ -122,6 +126,17 @@ def _invert_op(op_name: str, L: int, result: int) -> int | None:
         if result % L != 0:
             return None
         R = result // L
+    elif op_name == 'cat':
+        # cat(L, R) = int(str(L) + str(R)). Recover R as the suffix of str(result)
+        # after the str(L) prefix. Returns None for cases where R has a leading
+        # zero that gets dropped (e.g. cat(0, 7) = 7), falling back to enumeration.
+        s_L, s_result = str(L), str(result)
+        if not s_result.startswith(s_L):
+            return None
+        s_R = s_result[len(s_L):]
+        if not s_R:
+            return None
+        R = int(s_R)
     else:
         return None
     return R if 0 <= R <= 99 else None
@@ -180,12 +195,22 @@ def _b0_from_tens(op_name: str, a0: int, cb1: int, tval: int, is_neg: bool, used
 
 
 # ---------------------------------------------------------------------------
-# Per-example operation step (identical to v3)
+# Per-example operation step
 # ---------------------------------------------------------------------------
+# Branches per-op at the divergence points: b1 derivation from units, b0
+# derivation from tens, and result verification. The b0/b1 enumeration loop
+# itself is shared across all ops to avoid duplication.
+#
+#   add/sub: column carry/borrow constraints (single b1, b0 candidate when
+#            units/tens digit is known; otherwise enumerate)
+#   mul:     b1 derived from units (a1*b1 mod 10 == uval, ≤2 candidates);
+#            verify result via _derive_output
+#   cat:     no column constraints (units of cat = b1, but we already get
+#            this for free from B1s ∈ dm); verify via _derive_output
 
 def _step_op(op_name, L, a0, a1, B0s, B1s, out_syms, op_sym, f_type,
              dm, used, op_assign, examples, ex_idx, plausible, solutions, deadline, max_solutions):
-
+    # Inversion shortcut: if output is fully assigned, derive R algebraically
     result = _decode_result_numeric(out_syms, op_sym, f_type, dm)
     if result is not None:
         R = _invert_op(op_name, L, result)
@@ -202,9 +227,10 @@ def _step_op(op_name, L, a0, a1, B0s, B1s, out_syms, op_sym, f_type,
     is_neg, units_sym, tens_sym, hund_sym = _col_syms(out_syms, op_sym, f_type)
     uval_known = units_sym is not None and units_sym in dm
 
+    # b1 candidates — derived from units column when applicable
     if B1s in dm:
         b1_list = [dm[B1s]]
-    elif uval_known:
+    elif uval_known and op_name != 'cat':
         b1_list = _b1_from_units(op_name, a1, dm[units_sym], is_neg, used)
     else:
         b1_list = [v for v in B1_ORDER if v not in used]
@@ -215,22 +241,26 @@ def _step_op(op_name, L, a0, a1, B0s, B1s, out_syms, op_sym, f_type,
             continue
 
         cb1 = _carry1(op_name, a1, b1, is_neg)
-        uv = _units_val(op_name, a1, b1, is_neg)
 
-        if op_name != 'mul':
+        # Per-op units constraint
+        if op_name in ('add', 'sub'):
+            # add/sub: units of result is fully determined → assign it
+            uv = _units_val(op_name, a1, b1, is_neg)
             if units_sym:
                 dm_b1, used_b1, ok = _try_assign(units_sym, uv, dm_b1, used_b1)
                 if not ok:
                     continue
-        else:
+        elif op_name == 'mul':
+            # mul: only verify (output has more digits, others come from _derive_output)
+            uv = (a1 * b1) % 10
             if units_sym and units_sym in dm_b1 and dm_b1[units_sym] != uv:
                 continue
+        # cat: units_sym == B1s for raw, already consistent via _try_assign above
 
-        tval_known = tens_sym is not None and tens_sym in dm_b1
-
+        # b0 candidates — derived from tens column for add/sub when applicable
         if B0s in dm_b1:
             b0_list = [dm_b1[B0s]]
-        elif op_name in ('add', 'sub') and tval_known:
+        elif op_name in ('add', 'sub') and tens_sym is not None and tens_sym in dm_b1:
             b0_list = _b0_from_tens(op_name, a0, cb1, dm_b1[tens_sym], is_neg, used_b1)
         else:
             b0_list = [v for v in B0_ORDER if v not in used_b1]
@@ -240,20 +270,12 @@ def _step_op(op_name, L, a0, a1, B0s, B1s, out_syms, op_sym, f_type,
             if not ok:
                 continue
 
-            if op_name == 'mul':
-                result_val = L * (b0 * 10 + b1)
-                new_out, ok = _derive_output(result_val, out_syms, f_type, op_name, op_sym, dm_b0, used_b0)
-                if not ok:
-                    continue
-                dm_f = {**dm_b0, **new_out}
-                used_f = used_b0 | set(new_out.values())
-            else:
+            # Per-op result verification
+            if op_name in ('add', 'sub'):
                 cb2 = _carry2(op_name, a0, b0, cb1, is_neg)
-                tval = _tens_val(op_name, a0, b0, cb1, is_neg)
-
                 if op_name == 'sub' and cb2 != 0:
                     continue
-
+                tval = _tens_val(op_name, a0, b0, cb1, is_neg)
                 dm_f, used_f = dm_b0, used_b0
                 if tens_sym:
                     dm_f, used_f, ok = _try_assign(tens_sym, tval, dm_f, used_f)
@@ -263,6 +285,16 @@ def _step_op(op_name, L, a0, a1, B0s, B1s, out_syms, op_sym, f_type,
                     dm_f, used_f, ok = _try_assign(hund_sym, cb2, dm_f, used_f)
                     if not ok:
                         continue
+            else:  # mul, cat — verify via _derive_output
+                try:
+                    result_val = MATH_OPS[op_name]['fn'](L, b0 * 10 + b1, 0, 0, 0, 0)
+                except (ZeroDivisionError, ValueError, OverflowError):
+                    continue
+                new_out, ok = _derive_output(result_val, out_syms, f_type, op_name, op_sym, dm_b0, used_b0)
+                if not ok:
+                    continue
+                dm_f = {**dm_b0, **new_out}
+                used_f = used_b0 | set(new_out.values())
 
             _search_constrained(examples, ex_idx + 1, dm_f, used_f,
                                 {**op_assign, op_sym: op_name},

@@ -35,7 +35,7 @@ def run_variant(problems, label, solve_fn):
         return orig(*args, **kwargs)
 
     for p in tqdm(problems, desc=label, unit='prob'):
-        records.append({'id': p.id, 'ops': 0, 'correct': False, 'elapsed': 0.0, 'target_op': None})
+        records.append({'id': p.id, 'ops': 0, 'correct': False, 'elapsed': 0.0, 'target_op': None, 'answer': None})
         _ps._derive_output = _counted
         _ps2._derive_output = _counted
         _ps3._derive_output = _counted
@@ -44,6 +44,7 @@ def run_variant(problems, label, solve_fn):
             t0 = time.time()
             ans = solve_fn(p.prompt)
             records[-1]['elapsed'] = time.time() - t0
+            records[-1]['answer'] = str(ans) if ans is not None else None
             records[-1]['correct'] = str(ans) == str(p.answer)
         finally:
             _ps._derive_output = orig
@@ -216,6 +217,37 @@ def main():
             lines.append(f'| {r3["id"][:12]} | {r4["target_op"]} | {r3["ops"]:,} | {r4["ops"]:,} |')
         if len(regressions) > 30:
             lines.append(f'| ... | | | |')
+
+    # Failure classification: timeout vs exhausted vs wrong_search
+    # timeout    = search ran ~2s and returned None (hit deadline)
+    # exhausted  = search returned quickly with None (no valid cipher exists under pruning)
+    # wrong_search = search found a cipher but produced the wrong answer
+    TIMEOUT_THRESHOLD = 1.9
+    v4_recs_by_id = {r['id']: r for r in all_records['v4']}
+
+    lines += ['', '## v4 Failure Classification', '',
+              'Classifies each incorrect v4 result as one of:',
+              '- **timeout**: search hit the 2s deadline, returned no answer',
+              '- **exhausted**: search completed quickly, found no valid cipher (pruning too aggressive)',
+              '- **wrong_search**: search found a cipher but it produced the wrong answer', '']
+    lines += ['| Op | correct | timeout | exhausted | wrong_search | total |',
+              '|----|---------|---------|-----------|-------------|-------|']
+    for op_name in SUPPORTED_OPS:
+        op_probs = [p for p in problems if op_index[p.id]['target_op'] == op_name]
+        correct = sum(1 for p in op_probs if v4_recs_by_id[p.id]['correct'])
+        timeout = sum(1 for p in op_probs
+                      if not v4_recs_by_id[p.id]['correct']
+                      and v4_recs_by_id[p.id]['answer'] is None
+                      and v4_recs_by_id[p.id]['elapsed'] >= TIMEOUT_THRESHOLD)
+        exhausted = sum(1 for p in op_probs
+                        if not v4_recs_by_id[p.id]['correct']
+                        and v4_recs_by_id[p.id]['answer'] is None
+                        and v4_recs_by_id[p.id]['elapsed'] < TIMEOUT_THRESHOLD)
+        wrong_s = sum(1 for p in op_probs
+                      if not v4_recs_by_id[p.id]['correct']
+                      and v4_recs_by_id[p.id]['answer'] is not None)
+        lines.append(f'| {op_name} | {correct} | {timeout} | {exhausted} | {wrong_s} | {len(op_probs)} |')
+    lines += ['']
 
     report = '\n'.join(lines) + '\n'
     with open(OUT_PATH, 'w') as f:
