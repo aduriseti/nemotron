@@ -13,7 +13,7 @@ sys.path.insert(0, '/workspaces/nemotron')
 from tqdm import tqdm
 from reasoners.store_types import Problem
 import reasoners.cryptarithm_solver.python_solver as _ps
-from reasoners.cryptarithm_solver.python_solver_v2 import (
+from reasoners.cryptarithm_solver.python_solver_prefilter import (
     _precompute_op_constraints, _reorder_examples,
 )
 from reasoners.cryptarithm_solver.python_solver import (
